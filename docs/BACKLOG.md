@@ -14,10 +14,10 @@ Set up the pnpm workspace, Turborepo, and `packages/config` with shared strict `
 
 - **Depends on:** —
 - **Acceptance criteria:**
-  - [ ] `pnpm install`, `pnpm lint`, `pnpm typecheck` and `pnpm test` work from the root.
-  - [ ] CI runs lint, typecheck and test on every pull request.
-  - [ ] ESLint import restrictions enforce the package dependency rules (§4.2).
-  - [ ] ADR-0001 and ADR-0002 are written. `ARCHITECTURE.md` is updated once they are accepted.
+  - [x] `pnpm install`, `pnpm lint`, `pnpm typecheck` and `pnpm test` work from the root.
+  - [x] CI runs lint, typecheck and test on every pull request.
+  - [x] ESLint import restrictions enforce the package dependency rules (§4.2).
+  - [x] ADR-0001 and ADR-0002 are written. `ARCHITECTURE.md` is updated once they are accepted.
 
 ### M1.2 Define the domain model and schemas ⚠ Approval (ADR-0003, ADR-0004)
 

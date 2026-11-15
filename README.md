@@ -41,3 +41,12 @@ The first version focuses on TypeScript repositories:
 ## Project status
 
 Early development. The initial focus is building the code analysis engine and architecture model.
+
+## Development commands
+
+```bash
+pnpm install
+pnpm lint
+pnpm typecheck
+pnpm test
+```

@@ -1,0 +1,17 @@
+{
+  "name": "@archmind/config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./eslint": "./eslint/archmind.mjs",
+    "./prettier": "./prettier/index.cjs",
+    "./tsconfig": "./tsconfig/base.json",
+    "./vitest": "./vitest/base.ts"
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "test": "vitest run --config ../../vitest.config.ts --passWithNoTests"
+  }
+}

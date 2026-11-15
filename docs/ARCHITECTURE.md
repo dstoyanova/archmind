@@ -38,7 +38,7 @@ archmind/
 │   ├── web/
 │   ├── api/
 │   ├── worker/
-│   └── cli/          # proposed, ADR-0002
+│   └── cli/
 │
 ├── packages/
 │   ├── domain/
@@ -82,7 +82,7 @@ Packages should be introduced as needed rather than created as empty placeholder
 - **Web:** User interface and architecture visualisation.
 - **API:** Authentication, workspaces, repositories and application services.
 - **Worker:** Background repository analysis and processing. Analysis runs in an isolated child process (_proposed_, ADR-0007).
-- **CLI:** Local analysis and rule checks, including in CI (_proposed_, ADR-0002).
+- **CLI:** Local analysis and rule checks, including in CI.
 - **Code Analysis:** Parse source files and extract symbols and dependencies.
 - **Architecture Engine:** Build the hierarchical component model, dependency graph, metrics and cycles.
 - **Governance Engine:** Evaluate architectural rules against a snapshot and produce a rule evaluation with findings (_proposed_, ADR-0006).
