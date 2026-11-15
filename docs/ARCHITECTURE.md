@@ -16,7 +16,7 @@ Keep domain boundaries explicit and components independently testable. Introduce
 | Frontend               | Next.js, React                       |
 | Backend                | NestJS                               |
 | API                    | REST, OpenAPI                        |
-| Validation, contracts  | zod (_proposed_, ADR-0003)           |
+| Validation, contracts  | zod                                  |
 | Database               | PostgreSQL                           |
 | ORM                    | Prisma                               |
 | Code analysis          | TypeScript Compiler API, Tree-sitter |

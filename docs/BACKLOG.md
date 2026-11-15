@@ -1,6 +1,6 @@
 # ArchMind — Backlog
 
-Implementation tasks grouped by [roadmap](ROADMAP.md) milestone. Requirement IDs (FR-*, NFR-*) and section references (§) refer to the [MVP implementation plan](plans/mvp-implementation-plan.md).
+Implementation tasks grouped by [roadmap](ROADMAP.md) milestone. Requirement IDs (FR-_, NFR-_) and section references (§) refer to the [MVP implementation plan](plans/mvp-implementation-plan.md).
 
 Each task is sized to be completed and reviewed on its own, and can be split into smaller issues when work starts. A task is done when its acceptance criteria are met, and type checking, linting and the relevant tests pass.
 
@@ -25,10 +25,10 @@ Create `packages/domain` with snapshot types, the component hierarchy, file role
 
 - **Depends on:** M1.1
 - **Acceptance criteria:**
-  - [ ] Domain code has no infrastructure dependencies.
-  - [ ] Invariants are validated: every dependency references components in the same snapshot, and every file has exactly one owning component.
-  - [ ] `projectGraph` collapses to any depth or expanded set, dropping internal edges and aggregating weights, counts and evidence.
-  - [ ] The hashing specification (NFR-1) is documented in ADR-0004. ADR-0003 (zod) is approved.
+  - [x] Domain code has no infrastructure dependencies.
+  - [x] Invariants are validated: every dependency references components in the same snapshot, and every file has exactly one owning component.
+  - [x] `projectGraph` collapses to any depth or expanded set, dropping internal edges and aggregating weights, counts and evidence.
+  - [x] The hashing specification (NFR-1) is documented in ADR-0004. ADR-0003 (zod) is approved.
 
 ### M1.3 Discover source files and classify roles
 
