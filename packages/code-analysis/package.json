@@ -1,0 +1,19 @@
+{
+  "name": "@archmind/code-analysis",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "test": "vitest run --config ../../vitest.config.ts"
+  },
+  "dependencies": {
+    "@archmind/contracts": "workspace:*",
+    "ignore": "^7.0.5",
+    "minimatch": "^10.1.1"
+  }
+}

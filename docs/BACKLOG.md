@@ -36,11 +36,11 @@ Add the `SourceProvider` port and `LocalFsSourceProvider`, file discovery (FR-A1
 
 - **Depends on:** M1.2
 - **Acceptance criteria:**
-  - [ ] Respects `.gitignore` and excludes `node_modules`, build output, `.d.ts` and generated files.
-  - [ ] Applies the default role patterns, with `fileRoles` overrides from the config.
-  - [ ] Enforces file-level limits (NFR-6). Skipped files produce diagnostics.
-  - [ ] Uses repo-relative POSIX paths in a deterministic order.
-  - [ ] Computes `sourceHash` from the discovered files plus the analysis section of the config (rules excluded).
+  - [x] Respects `.gitignore` and excludes `node_modules`, build output, `.d.ts` and generated files.
+  - [x] Applies the default role patterns, with `fileRoles` overrides from the config.
+  - [x] Enforces file-level limits (NFR-6). Skipped files produce diagnostics.
+  - [x] Uses repo-relative POSIX paths in a deterministic order.
+  - [x] Computes `sourceHash` from the discovered files plus the analysis section of the config (rules excluded).
 
 ### M1.4 Extract imports and symbols
 
