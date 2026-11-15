@@ -48,9 +48,9 @@ Parse with `ts.createSourceFile` (no type-checking). Extract imports with their 
 
 - **Depends on:** M1.3
 - **Acceptance criteria:**
-  - [ ] Covers `static`, `re-export`, literal `dynamic`, literal `require` and `type-only` imports, including the all-specifiers-`type` case.
-  - [ ] Every import and symbol records its line and column.
-  - [ ] Malformed files produce a diagnostic, and analysis continues.
+  - [x] Covers `static`, `re-export`, literal `dynamic`, literal `require` and `type-only` imports, including the all-specifiers-`type` case.
+  - [x] Every import and symbol records its line and column.
+  - [x] Malformed files produce a diagnostic, and analysis continues.
 
 ### M1.5 Resolve modules without installation
 
