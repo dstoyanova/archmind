@@ -58,11 +58,11 @@ Implement the strategy in §4.6: a virtual host, tsconfig handling, workspace en
 
 - **Depends on:** M1.4
 - **Acceptance criteria:**
-  - [ ] Supports `paths`, project references, `extends` within the repository, and pnpm/npm/yarn workspaces.
-  - [ ] `extends` targets in uninstalled packages are skipped with a diagnostic.
-  - [ ] Workspace imports map `dist`/`exports` entry points back to source. Unmappable entries fall back to the package component with `WORKSPACE_ENTRY_UNMAPPED`.
-  - [ ] Never reads outside the repository root and never executes code (NFR-5).
-  - [ ] Records resolution statistics (NFR-8).
+  - [x] Supports `paths`, project references, `extends` within the repository, and pnpm/npm/yarn workspaces.
+  - [x] `extends` targets in uninstalled packages are skipped with a diagnostic.
+  - [x] Workspace imports map `dist`/`exports` entry points back to source. Unmappable entries fall back to the package component with `WORKSPACE_ENTRY_UNMAPPED`.
+  - [x] Never reads outside the repository root and never executes code (NFR-5).
+  - [x] Records resolution statistics (NFR-8).
 
 ### M1.6 Map files to the component hierarchy ⚠ Approval (ADR-0005)
 
