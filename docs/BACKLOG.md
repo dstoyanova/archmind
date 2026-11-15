@@ -1,6 +1,6 @@
 # ArchMind — Backlog
 
-Implementation tasks grouped by [roadmap](ROADMAP.md) milestone. Requirement IDs (FR-*, NFR-*) refer to the [MVP implementation plan](plans/mvp-implementation-plan.md).
+Implementation tasks grouped by [roadmap](ROADMAP.md) milestone. Requirement IDs (FR-*, NFR-*) and section references (§) refer to the [MVP implementation plan](plans/mvp-implementation-plan.md).
 
 Each task is sized to be completed and reviewed on its own, and can be split into smaller issues when work starts. A task is done when its acceptance criteria are met, and type checking, linting and the relevant tests pass.
 
@@ -14,128 +14,128 @@ Set up the pnpm workspace, Turborepo, and `packages/config` with shared strict `
 
 - **Depends on:** —
 - **Acceptance criteria:**
-  - [ ] `pnpm install`, `pnpm lint`, `pnpm typecheck` and `pnpm test` work from the root via Turborepo.
+  - [ ] `pnpm install`, `pnpm lint`, `pnpm typecheck` and `pnpm test` work from the root.
   - [ ] CI runs lint, typecheck and test on every pull request.
-  - [ ] ESLint import restrictions enforce the package dependency rules.
-  - [ ] ADR-0001 (modular monolith) and ADR-0002 (analysis-first, `apps/cli`) are written in `docs/adr/`.
+  - [ ] ESLint import restrictions enforce the package dependency rules (§4.2).
+  - [ ] ADR-0001 and ADR-0002 are written. `ARCHITECTURE.md` is updated once they are accepted.
 
-### M1.2 Define the domain and snapshot model (ADR-0003)
+### M1.2 Define the domain model and schemas ⚠ Approval (ADR-0003, ADR-0004)
 
-Create `packages/domain` with the snapshot types (SourceFile, FileImport, Symbol, Component, Dependency, Evidence, Cycle, Diagnostic). Create `packages/contracts` with the zod snapshot schema, including `schemaVersion`.
-
-- **Depends on:** M1.1
-- **Acceptance criteria:**
-  - [ ] Domain types have no infrastructure dependencies.
-  - [ ] The snapshot schema validates the version fields (NFR-2) and rejects dependencies that reference unknown components.
-  - [ ] ADR-0003 (snapshot format) is written.
-
-### M1.3 Discover source files
-
-Add a `SourceProvider` port and a `LocalFsSourceProvider` in `packages/code-analysis`, plus file discovery (FR-A1).
+Create `packages/domain` with snapshot types, the component hierarchy, file roles, import kinds, invariants and `projectGraph`. Create `packages/contracts` with zod schemas for the snapshot and for `archmind.config.json` (analysis section).
 
 - **Depends on:** M1.1
 - **Acceptance criteria:**
-  - [ ] Respects `.gitignore`.
-  - [ ] Excludes `node_modules`, build output, `.d.ts` and generated files.
-  - [ ] Enforces the file size and file count limits (NFR-6). Skipped files produce diagnostics.
-  - [ ] Output is sorted deterministically.
+  - [ ] Domain code has no infrastructure dependencies.
+  - [ ] Invariants are validated: every dependency references components in the same snapshot, and every file has exactly one owning component.
+  - [ ] `projectGraph` collapses to any depth or expanded set, dropping internal edges and aggregating weights, counts and evidence.
+  - [ ] The hashing specification (NFR-1) is documented in ADR-0004. ADR-0003 (zod) is approved.
+
+### M1.3 Discover source files and classify roles
+
+Add the `SourceProvider` port and `LocalFsSourceProvider`, file discovery (FR-A1), and file-role classification (FR-A2, §4.7).
+
+- **Depends on:** M1.2
+- **Acceptance criteria:**
+  - [ ] Respects `.gitignore` and excludes `node_modules`, build output, `.d.ts` and generated files.
+  - [ ] Applies the default role patterns, with `fileRoles` overrides from the config.
+  - [ ] Enforces file-level limits (NFR-6). Skipped files produce diagnostics.
+  - [ ] Uses repo-relative POSIX paths in a deterministic order.
+  - [ ] Computes `sourceHash` from the discovered files plus the analysis section of the config (rules excluded).
 
 ### M1.4 Extract imports and symbols
 
-Parse files with `ts.createSourceFile` (no type-checking). Extract imports (FR-A2) and exported symbols (FR-A3) with their line and column.
+Parse with `ts.createSourceFile` (no type-checking). Extract imports with their kinds (FR-A3) and exported symbols (FR-A4).
 
 - **Depends on:** M1.3
 - **Acceptance criteria:**
-  - [ ] Covers static imports, `export … from`, `import type`, literal `require()` and literal `import()`.
-  - [ ] Covers exported functions, classes, interfaces, types, enums and variables.
-  - [ ] Malformed files produce a diagnostic and analysis continues.
-  - [ ] Unit tests cover each import and symbol kind.
+  - [ ] Covers `static`, `re-export`, literal `dynamic`, literal `require` and `type-only` imports, including the all-specifiers-`type` case.
+  - [ ] Every import and symbol records its line and column.
+  - [ ] Malformed files produce a diagnostic, and analysis continues.
 
-### M1.5 Resolve module dependencies
+### M1.5 Resolve modules without installation
 
-Detect tsconfig files and workspace manifests. Resolve each specifier with `ts.resolveModuleName` plus a workspace package map (FR-A4).
+Implement the strategy in §4.6: a virtual host, tsconfig handling, workspace entry-point mapping, and external/built-in classification (FR-A5).
 
 - **Depends on:** M1.4
 - **Acceptance criteria:**
-  - [ ] Supports `baseUrl`/`paths`, project references, and pnpm/npm/yarn workspaces.
-  - [ ] Each import is classified as internal file, workspace package, external package, Node built-in or unresolved.
-  - [ ] Unresolved imports produce diagnostics.
-  - [ ] Never runs repository code and never reads JavaScript config files (NFR-5).
+  - [ ] Supports `paths`, project references, `extends` within the repository, and pnpm/npm/yarn workspaces.
+  - [ ] `extends` targets in uninstalled packages are skipped with a diagnostic.
+  - [ ] Workspace imports map `dist`/`exports` entry points back to source. Unmappable entries fall back to the package component with `WORKSPACE_ENTRY_UNMAPPED`.
+  - [ ] Never reads outside the repository root and never executes code (NFR-5).
+  - [ ] Records resolution statistics (NFR-8).
 
-### M1.6 Map files to components (ADR-0004)
+### M1.6 Map files to the component hierarchy ⚠ Approval (ADR-0005)
 
-Implement hybrid component inference in `packages/architecture-engine` (FR-A5).
+Implement the hierarchical hybrid model in `packages/architecture-engine` (FR-A6, §4.5).
 
-- **Depends on:** M1.2, M1.5
+- **Depends on:** M1.5
 - **Acceptance criteria:**
-  - [ ] Applies the priority order: `archmind.config.json` components, then workspace packages, then first-level source folders, then `<root>`.
-  - [ ] Every file belongs to exactly one component.
-  - [ ] `archmind.config.json` is validated with zod and gives clear error messages.
-  - [ ] ADR-0004 (component model) is written.
+  - [ ] Applies, in order: configured components, packages (depth 1), folders under component roots (depth 2), `<root>`.
+  - [ ] `componentRoots` overrides produce child components (for example, NestJS modules).
+  - [ ] Every file has exactly one owning component.
 
-### M1.7 Build the component graph, metrics and cycles
+### M1.7 Build the graph, metrics and cycles
 
-Aggregate file imports into component dependencies with evidence, and compute metrics and cycles (FR-A6, FR-A7).
+Aggregate dependencies at the owning-component level, with evidence and counts by kind and role. Compute metrics and cycles on the production graph (FR-A7, FR-A8).
 
 - **Depends on:** M1.6
 - **Acceptance criteria:**
-  - [ ] Each dependency has a weight and links to the file:line evidence for every import it aggregates.
-  - [ ] External package dependencies are recorded per component.
-  - [ ] Metrics per component: file count, LOC, fan-in, fan-out, instability.
-  - [ ] Tarjan's algorithm detects cycles at component and file level.
+  - [ ] Metrics per component are computed at its own depth.
+  - [ ] Tarjan cycles are found at each hierarchy level and at file level.
+  - [ ] Test-only cycles are excluded. Cycles that exist only through type-only imports are flagged `typeOnly`.
+  - [ ] External dependencies are recorded per component.
 
-### M1.8 Build deterministic snapshots
+### M1.8 Build reproducible snapshots
 
-Assemble the versioned snapshot with deterministic IDs and a `contentHash` (FR-A8, NFR-1, NFR-2).
+Assemble the versioned snapshot with deterministic IDs and the `contentHash` (FR-A9, NFR-1, NFR-2).
 
 - **Depends on:** M1.7
 - **Acceptance criteria:**
-  - [ ] Records `engineVersion`, `parserVersion`, `configHash` and `commitSha` (when the repository is a Git repo).
-  - [ ] Two runs on the same input produce an identical `contentHash`, verified by a test.
-  - [ ] The snapshot passes schema validation.
+  - [ ] Two runs on the same repository, and the same repository copied to a different directory, produce an identical `contentHash`. Covered by tests.
+  - [ ] Source metadata (commit SHA, branch, `commitTimestamp`, `workingTreeDirty`) is recorded but not hashed.
+  - [ ] The snapshot passes schema and invariant validation.
 
-### M1.9 Create the `archmind analyze` CLI
+### M1.9 Create the `archmind analyze` CLI and resolution benchmark
 
-Create `apps/cli` and fixture repositories in `tests/fixtures`.
+Create `apps/cli`, fixture repositories with expected graphs, and the dev-only resolution benchmark (§4.6).
 
 - **Depends on:** M1.8
 - **Acceptance criteria:**
-  - [ ] `archmind analyze <path> --out snapshot.json` writes the snapshot file.
-  - [ ] `--format summary` prints components, dependencies, cycles and diagnostics.
-  - [ ] Fixtures cover a single package, a monorepo, path aliases, a cycle and malformed files.
-  - [ ] Verified on at least two real open-source TypeScript monorepos.
-  - [ ] Performance is measured against NFR-7 and recorded.
+  - [ ] `archmind analyze <path> --out snapshot.json` writes the snapshot. `--format summary` prints components, dependencies, cycles, resolution statistics and diagnostics.
+  - [ ] Fixtures cover: single package, monorepo with `dist` entry points, path aliases, missing `extends` base, cycles (runtime, type-only and test-only), malformed files.
+  - [ ] On at least two open-source monorepos, the unresolved rate is at most 2% and agreement with the reference tool is at least 95%. Results are recorded in `docs/development/`.
+  - [ ] Performance is measured against NFR-7.
 
 ## M2 — Local architecture explorer
 
 ### M2.1 Define explorer API contracts
 
-Define zod view models in `packages/contracts` for the component graph, file graph, component detail and dependency evidence.
+Define zod view models for the projected component graph, file graph, component detail and dependency evidence, and generate OpenAPI from them.
 
 - **Depends on:** M1.8
 - **Acceptance criteria:**
-  - [ ] An OpenAPI document is generated from the contracts.
-  - [ ] Unit tests cover mapping a snapshot to each view model.
+  - [ ] View models support depth, expanded components, role filters and the type-only toggle.
+  - [ ] Unit tests cover the mappings.
 
 ### M2.2 Create the read-only explorer API
 
-Create `apps/api` (NestJS) with a `SnapshotReader` port and a file-system adapter that reads from `ARCHMIND_SNAPSHOT_DIR`.
+Create `apps/api` (NestJS) with a file-based `SnapshotReader` adapter that reads from `ARCHMIND_SNAPSHOT_DIR`.
 
 - **Depends on:** M2.1
 - **Acceptance criteria:**
   - [ ] Implements the M2 endpoints under `/api/workspaces/local/...`.
-  - [ ] Errors use a consistent shape. Inputs are validated.
-  - [ ] Swagger UI is served at `/api/docs`.
+  - [ ] Validates input with zod pipes and returns consistent errors.
+  - [ ] Serves Swagger UI at `/api/docs`.
   - [ ] Integration tests run against fixture snapshots.
 
 ### M2.3 Build the architecture explorer UI
 
-Create `apps/web` (Next.js, Tailwind, React Flow) with the component graph (FR-E1, FR-E2).
+Create `apps/web` (Next.js, Tailwind, React Flow) with the hierarchical graph (FR-E1, FR-E2).
 
 - **Depends on:** M2.2
 - **Acceptance criteria:**
-  - [ ] Auto-layout, zoom, pan and search.
-  - [ ] Cycle highlighting and filters by component and dependency kind.
+  - [ ] Auto-layout, expand and collapse, zoom, pan and search.
+  - [ ] Cycle highlighting, and filters for dependency kind, file role (tests hidden by default) and type-only imports.
   - [ ] Loading, empty and error states.
   - [ ] Usable with 300 components and 3,000 dependencies.
 
@@ -145,226 +145,266 @@ Add a side panel and drill-down navigation (FR-E3, FR-E4, FR-E5).
 
 - **Depends on:** M2.3
 - **Acceptance criteria:**
-  - [ ] The panel shows metrics, files, inbound and outbound dependencies.
-  - [ ] Dependency evidence is listed as file:line locations.
+  - [ ] The panel shows metrics, files, child components, inbound and outbound dependencies, and evidence (file:line, kind).
   - [ ] Drill-down from a component to its file graph works.
-  - [ ] An accessible list alternative to the graph exists (NFR-12).
+  - [ ] An accessible list alternative exists (NFR-14).
   - [ ] A Playwright smoke test covers the flow.
 
-## M3 — Persistent analysis service
+## M3 — Local governance
 
-### M3.1 Create the database schema
+### M3.1 Define the governance rule model ⚠ Approval (ADR-0006)
 
-Add Docker Compose with Postgres, and `packages/database` with a Prisma schema for Workspace, Repository, AnalysisRun, ArchitectureSnapshot and the snapshot child tables.
+Add the `rules` section of `archmind.config.json`: layers, forbidden dependencies, no cycles, thresholds and restricted packages. Rules can target any hierarchy level and opt in to tests or type-only imports (FR-G1, FR-G4).
 
-- **Depends on:** M2.2
+- **Depends on:** M1.8
 - **Acceptance criteria:**
-  - [ ] Migrations are committed. A default workspace is seeded.
-  - [ ] Indexes support the explorer query patterns.
-  - [ ] Prisma models are not exported from the package; repositories return domain types.
-  - [ ] Snapshot rows have no update paths (NFR-3).
+  - [ ] Validated with zod, with actionable error messages.
+  - [ ] `rulesHash` covers only the `rules` section.
+  - [ ] ADR-0006 defines rule evaluations as separate, immutable records.
 
-### M3.2 Add the job queue and worker ⚠ Approval (ADR-0005)
+### M3.2 Implement the governance engine
 
-Add a `JobQueue` port, a pg-boss adapter, and `apps/worker`.
+Create `packages/governance-engine`: a pure `evaluate(snapshot, rules, version)` that returns a `RuleEvaluation`, plus default rules (FR-G2, FR-G3).
 
 - **Depends on:** M3.1
 - **Acceptance criteria:**
-  - [ ] Supports `enqueue` with an idempotency key.
-  - [ ] Bounded retries with backoff, a per-job timeout and limited concurrency.
-  - [ ] Run status follows `queued → running → succeeded | failed`.
-  - [ ] ADR-0005 is written.
+  - [ ] Each finding has a rule ID and version, severity, message, evidence and fingerprint.
+  - [ ] Fingerprints use component paths and dependency endpoints, never line numbers, and are tested to stay stable across unrelated edits.
+  - [ ] Default rules ignore test files and `typeOnly` cycles.
+  - [ ] Unit tests cover every rule type.
 
-### M3.3 Persist analysis snapshots
+### M3.3 Add the `archmind check` CLI command
 
-Implement the `analyse-repository` job: read the source, analyse it, and publish the snapshot in a single transaction using batched inserts.
+Evaluate rules for a path or an existing snapshot. Write an evaluation document and compare it with an optional baseline (FR-G5, FR-G7).
 
-- **Depends on:** M3.2
+- **Depends on:** M3.2, M1.9
 - **Acceptance criteria:**
-  - [ ] An existing idempotency key reuses the snapshot (FR-R4, NFR-4).
-  - [ ] Killing the worker mid-run leaves no partial snapshot.
-  - [ ] Temporary files are always cleaned up.
+  - [ ] `--fail-on <severity>` sets the exit code. `--baseline <evaluation.json> --new-only` counts only new findings.
+  - [ ] `compareEvaluations` (in `domain`) classifies findings as new, existing or resolved, and flags `rulesChanged`.
+  - [ ] Editing only rules reuses the existing snapshot.
+  - [ ] ArchMind's own CI runs `archmind check` and passes.
 
-### M3.4 Expose repository and analysis APIs
+### M3.4 Serve findings from the explorer API
 
-Add workspace-scoped repository, analysis run and snapshot endpoints. Switch the explorer to a Postgres-backed `SnapshotReader`.
+Add a file-based `EvaluationReader` and the M3 endpoints: evaluations, findings with an optional baseline, finding detail and health summary.
 
-- **Depends on:** M3.3
+- **Depends on:** M3.3, M2.2
 - **Acceptance criteria:**
-  - [ ] Implements the M3 endpoints.
-  - [ ] `POST /analyses` returns `202`.
-  - [ ] Snapshot lists are cursor-paginated.
-  - [ ] Registering a local-path repository is only possible in development mode.
+  - [ ] Findings are paginated and filterable.
+  - [ ] Status is computed on read when a baseline is given.
+  - [ ] Integration tests run against violation fixtures.
 
-### M3.5 Build the repository and run UI
+### M3.5 Build the findings UI
 
-Add a repository list, an "add repository" flow, an analysis trigger, run status polling and a snapshot picker (FR-R1 to FR-R3).
+Add a findings list and detail view, graph highlighting and a health summary (FR-G6).
 
 - **Depends on:** M3.4, M2.4
 - **Acceptance criteria:**
-  - [ ] Covers the end-to-end flow: add a repository, analyse it, explore it, and open a past snapshot.
-  - [ ] Failed runs show their diagnostics.
+  - [ ] You can jump from a finding to the affected components and to the evidence.
+  - [ ] Covered by a Playwright test.
 
-## M4 — GitHub and multi-user
+## M4 — Persistent analysis service
 
-### M4.1 Register the GitHub App ⚠ Approval (ADR-0006)
+### M4.1 Create the database schema and storage model ⚠ Approval (ADR-0008)
 
-Create the GitHub App with `contents: read` and `metadata: read` permissions only. Handle `installation` and `installation_repositories` webhooks.
+Add Docker Compose with Postgres, and `packages/database` with the M4 entities (§4.8), `SnapshotDocumentStore` and a seeded default workspace.
 
-- **Depends on:** —
+- **Depends on:** M3.4
 - **Acceptance criteria:**
-  - [ ] Webhook signatures are verified.
-  - [ ] The private key and secrets come from environment variables only (NFR-9).
-  - [ ] Tests cover webhook verification.
+  - [ ] Only the relational core is relational. Snapshot documents are gzip-compressed and unique per `(repositoryId, contentHash)`.
+  - [ ] Snapshot, evaluation and finding rows have no update paths (NFR-3).
+  - [ ] Prisma models are not exported from the package.
+  - [ ] Indexes support the explorer and findings queries.
 
-### M4.2 Implement sign-in with GitHub ⚠ Approval (ADR-0006)
+### M4.2 Add the job queue and isolated analysis worker ⚠ Approval (ADR-0007)
 
-Add GitHub App user authorisation (OAuth), the User and Session tables, and logout (FR-I1).
+Add the `JobQueue` port, a pg-boss adapter and `apps/worker`. Analysis runs in a forked child process (§4.10).
 
-- **Depends on:** M4.1, M3.4
+- **Depends on:** M4.1
 - **Acceptance criteria:**
-  - [ ] Validates the OAuth `state` parameter.
-  - [ ] Stores a hashed session token in an `httpOnly`, `Secure`, `SameSite=Lax` cookie.
-  - [ ] CSRF protection on state-changing requests.
-  - [ ] No GitHub token ever reaches the browser.
+  - [ ] The child process gets a memory cap, a wall-clock timeout enforced by the parent, and no credentials in its environment.
+  - [ ] The parent sends a heartbeat. The reaper fails stale `running` runs with `WORKER_LOST` and re-enqueues them within the retry budget.
+  - [ ] Tests prove that exceeding the time or memory limit fails the run while the worker stays healthy.
 
-### M4.3 Add workspaces and authorisation ⚠ Approval (ADR-0007)
+### M4.3 Persist analysis snapshots
 
-Add the WorkspaceMember table with owner and member roles, create a personal workspace on first sign-in, and add a `WorkspaceMemberGuard` (FR-I2, FR-I4).
+Implement the `analyse-repository` job with idempotency by source identity (NFR-4) and atomic publishing.
 
 - **Depends on:** M4.2
 - **Acceptance criteria:**
-  - [ ] Every tenant route is guarded.
-  - [ ] Every query filters by `workspaceId`.
-  - [ ] A cross-tenant access test matrix covers all routes (NFR-8).
+  - [ ] Unchanged source reuses the snapshot. An uncommitted local edit creates a new snapshot.
+  - [ ] Identical `contentHash` values share one snapshot document.
+  - [ ] Killing the worker mid-run leaves no partial snapshot. Temporary files are always cleaned up.
 
-### M4.4 Analyse GitHub repositories
+### M4.4 Persist rule evaluations and baselines
 
-Link installations to workspaces, add repository selection, and add a `GitHubSourceProvider` that downloads the tarball at a commit (FR-I3, FR-A9).
+Implement the `evaluate-rules` job, re-evaluation, and automatic baseline selection (§4.9, FR-R5).
 
-- **Depends on:** M4.3, M3.3
+- **Depends on:** M4.3
 - **Acceptance criteria:**
-  - [ ] The API verifies with GitHub that the user can access an installation before linking it.
-  - [ ] Archive extraction rejects path traversal and symlinks and enforces size limits (NFR-5, NFR-6).
-  - [ ] Uninstalling the app disables the affected repositories.
+  - [ ] A rule failure never affects the snapshot.
+  - [ ] Upgrading the governance engine re-evaluates without re-analysis.
+  - [ ] Baseline selection works for the tracked branch, other branches and uncommitted local changes, and handles out-of-order analyses. Covered by tests.
 
-### M4.5 Review auth and tenant isolation ⚠ Approval
+### M4.5 Expose repository, run and findings APIs
 
-Human security review of authentication, sessions, tokens, tenant isolation and untrusted source handling.
+Add the M4 endpoints, and switch the explorer and findings readers to the database.
 
 - **Depends on:** M4.4
+- **Acceptance criteria:**
+  - [ ] `POST /analyses` returns `202`. Lists are cursor-paginated.
+  - [ ] Registering a local-path repository is only possible in development mode.
+  - [ ] File-level views load snapshot documents through a bounded cache.
+
+### M4.6 Build the repository and run UI
+
+Add a repository list, an "add repository" flow, an analysis trigger, run status, snapshot history, and findings with new/resolved status (FR-R1 to FR-R3).
+
+- **Depends on:** M4.5, M3.5
+- **Acceptance criteria:**
+  - [ ] Covers the end-to-end flow: add a repository, analyse it, explore it, view findings and open a past snapshot.
+  - [ ] Failed runs show their reason and diagnostics.
+
+### M4.7 Add structured logging with redaction
+
+Create `packages/observability` with a pino logger, correlation IDs and redaction (NFR-12).
+
+- **Depends on:** M4.2
+- **Acceptance criteria:**
+  - [ ] Every request and run can be traced through the logs.
+  - [ ] Tests prove that tokens, secrets and source content are redacted.
+
+## M5 — GitHub, teams and staging
+
+### M5.1 Register the GitHub App ⚠ Approval (ADR-0009)
+
+Create separate development and staging GitHub Apps with `contents: read` and `metadata: read` only. Handle installation and repository webhooks.
+
+- **Depends on:** M4.5
+- **Acceptance criteria:**
+  - [ ] Webhook signatures are verified.
+  - [ ] Secrets come from the environment only (NFR-10).
+  - [ ] The local development webhook setup is documented in `docs/development/`.
+
+### M5.2 Implement sign-in with GitHub ⚠ Approval (ADR-0009)
+
+Add GitHub App user authorisation, User, Session and encrypted `GitHubUserToken`, and logout (FR-I1).
+
+- **Depends on:** M5.1
+- **Acceptance criteria:**
+  - [ ] Validates the OAuth `state` parameter.
+  - [ ] Stores a hashed session token in a `httpOnly`, `Secure`, `SameSite=Lax` cookie.
+  - [ ] CSRF protection on state-changing requests.
+  - [ ] Tokens are encrypted at rest, refreshed on expiry, and never reach the browser.
+
+### M5.3 Add workspaces, membership and invitations ⚠ Approval (ADR-0010)
+
+Add WorkspaceMember, Invitation and `WorkspaceMemberGuard`, and create a personal workspace on first sign-in (FR-I2, FR-I3, FR-I7).
+
+- **Depends on:** M5.2
+- **Acceptance criteria:**
+  - [ ] Invitations are single-use, expire after 7 days, and can only be accepted by the invited GitHub login.
+  - [ ] Only owners manage members and invitations. Removing a member takes effect on their next request.
+  - [ ] A cross-tenant access test matrix covers every route (NFR-9).
+
+### M5.4 Connect and analyse GitHub repositories
+
+Add installation linking, repository selection with per-user access checks, `GitHubSourceProvider` with safe extraction, disconnection handling, and commit-pinned links (FR-I4 to FR-I6, FR-A10, FR-E6).
+
+- **Depends on:** M5.3, M4.3
+- **Acceptance criteria:**
+  - [ ] A user cannot link an installation or repository they cannot access. Access is re-checked when they trigger an analysis.
+  - [ ] Extraction applies NFR-6: only relevant files are extracted, links and special files are skipped with diagnostics, and traversal entries fail the run. Malicious archive fixtures are tested.
+  - [ ] Uninstalling the App, or removing a repository from it, disconnects the repository.
+  - [ ] The connect screen states that all workspace members will see the repository's architecture data.
+
+### M5.5 Deploy the staging environment ⚠ Approval (ADR-0011)
+
+Add Dockerfiles for `api`, `web` and `worker`, a hosting provider, managed Postgres, secrets management, HTTPS and deployment from `main`.
+
+- **Depends on:** M5.1, M4.7
+- **Acceptance criteria:**
+  - [ ] Staging is reachable at a public HTTPS URL, with GitHub callbacks and webhooks working.
+  - [ ] The worker container has a memory limit.
+  - [ ] Deployment is automated.
+
+### M5.6 Review auth, tenant isolation and source handling ⚠ Approval
+
+A human security review of authentication, sessions, tokens, invitations, repository access, tenant isolation, archive handling and the analysis process.
+
+- **Depends on:** M5.4, M5.5
 - **Acceptance criteria:**
   - [ ] Findings are documented and resolved.
   - [ ] Signed off before any external user is invited.
 
-## M5 — Governance and findings
-
-### M5.1 Define the governance rule model (ADR-0008)
-
-Add a `rules` section to `archmind.config.json`: layers, forbidden dependencies, no cycles, thresholds and restricted external packages (FR-G1).
-
-- **Depends on:** M1.8
-- **Acceptance criteria:**
-  - [ ] Validated with zod, with clear and actionable errors.
-  - [ ] The config hash includes the rules.
-  - [ ] ADR-0008 is written.
-
-### M5.2 Implement the rule evaluation engine
-
-Create `packages/governance-engine`: a pure function `(snapshot, rules) → findings`, plus built-in default rules (FR-G2, FR-G3).
-
-- **Depends on:** M5.1
-- **Acceptance criteria:**
-  - [ ] Each finding has a rule ID and version, severity, message, evidence (component, dependency or file:line) and a stable fingerprint.
-  - [ ] Unit tests cover every rule type.
-  - [ ] Fingerprints stay stable across unrelated code changes.
-
-### M5.3 Generate and expose findings
-
-Add the `evaluate-rules` worker job, the `Finding` table and the findings API (FR-G4).
-
-- **Depends on:** M5.2, M4.5
-- **Acceptance criteria:**
-  - [ ] Runs as a separate job; a rule failure never invalidates the snapshot.
-  - [ ] Findings are marked new, existing or resolved compared with the previous snapshot.
-  - [ ] The findings list is paginated and filterable.
-
-### M5.4 Build the findings UI
-
-Add a findings list, a finding detail view, graph highlighting, commit-pinned GitHub links and a health summary (FR-G5, FR-E6).
-
-- **Depends on:** M5.3
-- **Acceptance criteria:**
-  - [ ] You can jump from a finding to the graph and to the exact source line on GitHub.
-  - [ ] Covered by a Playwright test.
-
-### M5.5 Add the `archmind check` CLI command
-
-Evaluate rules locally for use in CI (FR-G6).
-
-- **Depends on:** M5.2
-- **Acceptance criteria:**
-  - [ ] Exits non-zero when violations meet or exceed `--fail-on <severity>`.
-  - [ ] ArchMind's own CI runs `archmind check` against this repository.
-
 ## M6 — AI architecture assistant
 
-### M6.1 Define read-only architecture tools
+### M6.1 Define the AI data policy and opt-in ⚠ Approval (ADR-0012)
 
-Create `packages/agent-runtime` with tools bound server-side to `(workspaceId, snapshotId)`. The tools call the application query services.
+Choose the first provider, write the data policy, and add the workspace AI setting with an opt-in screen (FR-AI1).
 
-- **Depends on:** M5.3
+- **Depends on:** M5.6
+- **Acceptance criteria:**
+  - [ ] AI is off by default. Only owners can enable it, on a screen that names the provider and lists the data sent.
+  - [ ] The provider is configured for no training on customer data and minimal retention, where offered.
+
+### M6.2 Define the read-only architecture tools
+
+Add `packages/agent-runtime` with `ArchitectureQueryPort`, implemented by `apps/api` query services, and the §4.12 tools.
+
+- **Depends on:** M5.6
 - **Acceptance criteria:**
   - [ ] Tool inputs and outputs are zod-validated.
-  - [ ] No tool can write data.
+  - [ ] No tool writes data or returns file contents.
   - [ ] Tests prove a tool cannot reach another workspace or snapshot.
 
-### M6.2 Build the assistant with cited answers ⚠ Approval (ADR-0009)
+### M6.3 Build the assistant with validated citations
 
-Build a LangGraph.js agent that uses a provider configured via the LangChain chat model interface, and returns structured answers with citations (FR-AI2, FR-AI3).
+Build a LangGraph.js agent with a claim-level answer contract, citation validation, one retry, and an insufficient-evidence response (FR-AI3, FR-AI4).
 
-- **Depends on:** M6.1
+- **Depends on:** M6.1, M6.2
 - **Acceptance criteria:**
-  - [ ] Citations not found in this run's tool results are removed and logged.
-  - [ ] Returns an explicit insufficient-evidence answer when appropriate.
-  - [ ] Enforces step, token and time limits.
+  - [ ] No claim without a valid citation is ever returned.
+  - [ ] Removed claims are logged.
+  - [ ] Limits on steps, tokens and time are enforced.
   - [ ] Repository content is never treated as instructions.
+  - [ ] The agent refuses to run when AI is disabled for the workspace.
 
-### M6.3 Add the conversations API and chat UI
+### M6.4 Add conversations and the chat UI
 
-Add the Conversation and Message tables, an SSE message endpoint, a chat panel and an "Explain this finding" action (FR-AI1, FR-AI4, FR-AI5).
+Add Conversation and Message tables, an SSE endpoint that streams progress and then the validated answer, a chat panel, and "Explain this finding" (FR-AI2, FR-AI5, FR-AI6).
 
-- **Depends on:** M6.2, M5.4
+- **Depends on:** M6.3, M4.6
 - **Acceptance criteria:**
-  - [ ] Responses stream.
-  - [ ] Citations link into the explorer.
+  - [ ] Progress streams live, and citations link into the explorer.
   - [ ] Conversations are scoped to a workspace and snapshot.
-  - [ ] An AI failure shows a clear error and leaves the rest of the UI working (NFR-10).
+  - [ ] An AI failure leaves the rest of the UI working (NFR-11).
 
-### M6.4 Trace agent runs and usage
+### M6.5 Trace agent runs and usage
 
 Add AgentRun and ToolCall tables, per-workspace usage limits and a trace view.
 
-- **Depends on:** M6.2, M6.3
+- **Depends on:** M6.3, M6.4
 - **Acceptance criteria:**
-  - [ ] Records model, tokens, cost, latency, and tool inputs and outputs.
-  - [ ] Enforces usage limits.
-  - [ ] No secrets appear in traces.
+  - [ ] Records provider, model, tokens, cost, latency, tool inputs and outputs, and removed claims.
+  - [ ] Usage limits are enforced.
+  - [ ] Traces contain no secrets.
 
-### M6.5 Create the assistant evaluation harness
+### M6.6 Build the evaluation harness and quality bar
 
-Add a fake model for tests, a golden question set over fixture snapshots, and an opt-in live evaluation script.
+Add a fake model for tests, and a live evaluation set of at least 30 questions over 3 snapshots, scored automatically (§4.12).
 
-- **Depends on:** M6.2
+- **Depends on:** M6.3
 - **Acceptance criteria:**
   - [ ] Ordinary CI never calls a real LLM.
-  - [ ] The golden set passes with the fake model.
+  - [ ] The live evaluation meets the bar: at least 80% expected facts cited, at least 90% correct insufficient-evidence responses, and zero unresolvable citations displayed.
+  - [ ] 20 answers are reviewed manually. Results are recorded in `docs/development/`.
 
 ## M7 — Beta
 
-### M7.1 Add snapshot history and comparison
+### M7.1 Add snapshot comparison and analysis on push
 
-Add snapshot comparison and optional analysis on push to the default branch (FR-R5, FR-R6).
+Add snapshot comparison and optional analysis on push to the tracked branch (FR-R6, FR-R7).
 
 - **Depends on:** M5.4
 - **Acceptance criteria:**
@@ -373,39 +413,38 @@ Add snapshot comparison and optional analysis on push to the default branch (FR-
 
 ### M7.2 Improve onboarding and UX
 
-Add guided onboarding (install the app, select a repository, run the first analysis), starter `archmind.config.json` generation and an accessibility pass.
+Add guided onboarding (install the App, select a repository, run the first analysis), starter `archmind.config.json` generation, and an accessibility pass.
 
-- **Depends on:** M6.3
+- **Depends on:** M6.4
 - **Acceptance criteria:**
   - [ ] A new user reaches their first explored snapshot without documentation.
   - [ ] Core flows are keyboard-navigable.
 
-### M7.3 Add observability
+### M7.3 Add production observability
 
-Create `packages/observability`: structured logging (pino), correlation IDs, health checks, error monitoring, and metrics for analysis duration and failures (NFR-11).
+Extend `packages/observability` with metrics (analysis duration and failures, queue depth), error monitoring, health checks and alerting.
 
-- **Depends on:** M3.2
+- **Depends on:** M5.5
 - **Acceptance criteria:**
-  - [ ] Every request and analysis run can be traced through the logs.
-  - [ ] Source code and secrets are never logged.
+  - [ ] Failed and slow analyses trigger alerts.
+  - [ ] Dashboards cover the API, worker and queue.
 
-### M7.4 Deploy the hosted environment ⚠ Approval (ADR-0010)
+### M7.4 Deploy the production environment
 
-Add Dockerfiles for the API, web app and worker; choose a cloud host; set up managed Postgres, secrets management, backups, staging and production, and continuous deployment.
+Set up the production environment, backups, continuous deployment with promotion from staging, and a secret manager.
 
-- **Depends on:** M4.5, M7.3
+- **Depends on:** M5.6, M7.3
 - **Acceptance criteria:**
-  - [ ] Deployments are automated.
   - [ ] Restoring from backup has been verified.
-  - [ ] Secrets come from a secret manager.
+  - [ ] Deployment is automated and repeatable.
 
 ### M7.5 Harden with end-to-end and security checks
 
-Add Playwright journeys, rate limiting, dependency auditing, data retention and workspace deletion.
+Add Playwright journeys, rate limiting, dependency auditing, retention policies for snapshots, documents and conversations, and workspace deletion.
 
-- **Depends on:** M6.3, M7.4
+- **Depends on:** M6.4, M7.4
 - **Acceptance criteria:**
-  - [ ] Journeys cover sign-in, workspace, GitHub connection, analysis, exploration, findings and asking a question.
+  - [ ] Journeys cover sign-in, invitation, GitHub connection, analysis, exploration, findings, enabling AI and asking a question.
   - [ ] Deleting a workspace removes all of its data.
 
 ### M7.6 Run a pilot with early teams
@@ -415,4 +454,4 @@ Onboard early engineering teams, collect feedback and agree post-beta priorities
 - **Depends on:** M7.1, M7.2, M7.5
 - **Acceptance criteria:**
   - [ ] At least one external team uses ArchMind on a real repository.
-  - [ ] Feedback and the next priorities are documented.
+  - [ ] Feedback and next priorities are documented.

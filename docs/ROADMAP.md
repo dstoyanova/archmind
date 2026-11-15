@@ -1,131 +1,143 @@
 # ArchMind — Development Roadmap
 
-ArchMind is built **analysis-first**: the deterministic analysis engine comes first, then persistence, users, governance and AI are layered on top. Governance comes before the AI assistant, so the assistant can base its answers on deterministic facts and findings.
+ArchMind is built in this order:
+
+1. **Analysis first.** The deterministic analysis engine and explorer come first.
+2. **Local governance.** Rules and findings follow straight after, while everything still runs locally. This answers *"what should I be concerned about?"* before any investment in persistence, authentication or hosting.
+3. **Platform.** Persistence, then GitHub with teams and a hosted staging environment.
+4. **AI.** The assistant comes last, so it can rely on deterministic facts and findings.
 
 Every milestone ends with a **working, demoable product**. No milestone consists only of infrastructure.
 
 - Requirements, architecture and rationale: [MVP implementation plan](plans/mvp-implementation-plan.md).
 - Tasks and acceptance criteria: [backlog](BACKLOG.md).
 
-| Milestone | Name                        | Working product at the end                                                  |
-| --------- | --------------------------- | --------------------------------------------------------------------------- |
-| M1        | Local analysis CLI          | `archmind analyze ./repo` produces an architecture snapshot and summary.    |
-| M2        | Local architecture explorer | Browse any analysed repository as an interactive graph in the browser.      |
-| M3        | Persistent analysis service | Add a repository, analyse it in the background and see analysis history.    |
-| M4        | GitHub and multi-user       | Sign in with GitHub, connect a repository and explore it with teammates.    |
-| M5        | Governance and findings     | See architectural risks and rule violations, with evidence.                 |
-| M6        | AI architecture assistant   | Ask questions about the architecture and get answers that cite evidence.    |
-| M7        | Beta                        | A hosted, monitored product with history and comparison, ready for pilots.  |
+| Milestone | Name                        | Working product at the end                                                           |
+| --------- | --------------------------- | ------------------------------------------------------------------------------------ |
+| M1        | Local analysis CLI          | `archmind analyze ./repo` produces an architecture snapshot and summary.             |
+| M2        | Local architecture explorer | Browse any analysed repository as an interactive, hierarchical graph in the browser. |
+| M3        | Local governance            | `archmind check` and the explorer show rule violations and risks, with evidence.     |
+| M4        | Persistent analysis service | Analyse repositories in the background, with history and new/resolved findings.      |
+| M5        | GitHub, teams and staging   | Teammates sign in on a hosted staging environment and explore private repositories.  |
+| M6        | AI architecture assistant   | Ask questions about the architecture and get answers that cite evidence.             |
+| M7        | Beta                        | A production, monitored product with comparison and onboarding, ready for pilots.    |
 
 ## M1 — Local analysis CLI
 
 **Goal:** prove the analysis engine on real TypeScript repositories.
 
 - [ ] Monorepo, shared tooling configuration and CI.
-- [ ] Domain model and versioned snapshot schema.
-- [ ] Source file discovery with ignore rules and limits.
-- [ ] Import and exported-symbol extraction (TypeScript Compiler API).
-- [ ] Module resolution: `tsconfig` paths, project references, workspaces.
-- [ ] Hybrid component mapping: workspace packages and folders, overridable by `archmind.config.json`.
-- [ ] Component dependency graph with evidence, metrics and cycle detection.
-- [ ] Deterministic, versioned snapshot builder.
-- [ ] `archmind analyze` CLI and fixture repositories.
+- [ ] Domain model, plus snapshot and config schemas (zod).
+- [ ] Source file discovery and file roles (source, test, story, script, config).
+- [ ] Import extraction with import kinds (including type-only), and exported-symbol extraction.
+- [ ] Module resolution without installing dependencies, with resolution statistics.
+- [ ] Hierarchical component mapping: packages, then folders, overridable by `archmind.config.json`.
+- [ ] Dependency graph with evidence, metrics and cycles, computed on the production graph.
+- [ ] Reproducible, versioned snapshot builder.
+- [ ] `archmind analyze` CLI, fixture repositories and a resolution benchmark.
 
 **Outcome:** `archmind analyze <path> --out snapshot.json` describes the architecture of a local TypeScript repository.
 
 **Exit criteria:**
-- Works on every fixture and on at least two real open-source TypeScript monorepos.
-- Running it twice produces the same `contentHash`.
+- Every fixture matches its expected graph.
+- On at least two open-source monorepos, at most 2% of imports are unresolved and at least 95% of internal edges agree with a reference tool.
+- The same files produce the same `contentHash` in any directory.
 - Malformed files produce diagnostics, never crashes.
-- Performance has been measured against the target.
+- Performance has been measured.
 
 ## M2 — Local architecture explorer
 
-**Goal:** make snapshots explorable and check that the inferred components make sense to people.
+**Goal:** make snapshots explorable and check that the inferred hierarchy makes sense to people.
 
 - [ ] Explorer API contracts and OpenAPI.
 - [ ] Read-only NestJS API serving snapshot files from a directory.
-- [ ] Interactive component graph: auto-layout, search, filters, cycle highlighting.
+- [ ] Interactive hierarchical graph: auto-layout, expand and collapse, search, cycle highlighting, and filters for file role and type-only imports.
 - [ ] Component details, dependency evidence and drill-down to files.
 
 **Outcome:** browse the architecture of any repository analysed in M1.
 
 **Exit criteria:**
-- `pnpm dev` with `ARCHMIND_SNAPSHOT_DIR` set lets you explore any M1 snapshot.
+- ArchMind's own bounded contexts are visible as child components.
 - The graph stays usable at around 300 components and 3,000 dependencies.
 
-## M3 — Persistent analysis service
+## M3 — Local governance
 
-**Goal:** turn the tool into a service with history and background processing.
-
-- [ ] PostgreSQL via Docker Compose and Prisma schema, with a seeded default workspace.
-- [ ] Postgres-backed job queue (pg-boss) behind a `JobQueue` interface, and `apps/worker`.
-- [ ] Atomic, immutable, idempotent snapshot persistence.
-- [ ] Repository, analysis run and snapshot APIs.
-- [ ] Repository and run UI. Explorer reads from Postgres.
-
-**Outcome:** `docker compose up`, add a local repository, analyse it and browse its history.
-
-**Exit criteria:**
-- Re-analysing the same commit reuses the existing snapshot.
-- Killing the worker mid-run leaves no partial snapshot.
-
-## M4 — GitHub and multi-user
-
-**Goal:** real users and real repositories, safely.
-
-- [ ] GitHub App with minimal permissions and verified webhooks.
-- [ ] Sign in with GitHub, using server-side sessions.
-- [ ] Workspaces, membership and server-side authorisation on every route.
-- [ ] Analysis of GitHub repositories at a specific commit, with safe archive extraction.
-- [ ] Security review of auth, tokens, tenant isolation and untrusted source handling.
-
-**Outcome:** a teammate signs in, connects a private repository and explores it.
-
-**Exit criteria:**
-- Automated tests prove there is no cross-tenant access.
-- The security review is signed off before any external user is invited.
-
-## M5 — Governance and findings
-
-**Goal:** answer *"what should I be concerned about?"*
+**Goal:** answer *"what should I be concerned about?"* before any platform investment.
 
 - [ ] Rule model in `archmind.config.json`: layers, forbidden dependencies, cycles, thresholds, restricted packages.
-- [ ] Pure rule evaluation engine with built-in default rules.
-- [ ] Findings with evidence and stable fingerprints, marked new, existing or resolved.
-- [ ] Findings API and UI, graph highlighting, commit-pinned GitHub links, health summary.
+- [ ] Pure governance engine with built-in default rules, producing immutable rule evaluations.
+- [ ] Baseline comparison, marking findings as new, existing or resolved.
 - [ ] `archmind check` for local and CI use.
+- [ ] Findings, health summary and graph highlighting in the local explorer.
 
-**Outcome:** users see architectural risks and violations, with file-level evidence.
+**Outcome:** risks and rule violations are visible with file-level evidence, both locally and in CI.
 
 **Exit criteria:**
-- `archmind check` fails CI on a fixture that contains violations.
-- ArchMind's own repository passes its rules.
+- Tests and type-only cycles do not produce default findings.
+- `archmind check` fails on violations, and with a baseline reports only new ones.
+- ArchMind's own CI passes `archmind check`.
+
+## M4 — Persistent analysis service
+
+**Goal:** turn the tool into a service with history, background processing and automatic baselines.
+
+- [ ] PostgreSQL via Docker Compose. Relational core plus deduplicated snapshot documents. Seeded default workspace.
+- [ ] Postgres-backed job queue (pg-boss), and a worker running analysis in an isolated child process with recovery of stuck runs.
+- [ ] Idempotent, atomic snapshot persistence, including correct handling of uncommitted local changes.
+- [ ] Persisted rule evaluations with automatic baseline selection.
+- [ ] Repository, run, snapshot and findings APIs and UI.
+- [ ] Structured logging with redaction.
+
+**Outcome:** `docker compose up`, add a local repository, analyse it, and see its history and how its findings change over time.
+
+**Exit criteria:**
+- Killing the worker mid-run leaves no partial snapshot, and the run is recovered.
+- Runs that exceed their memory or time limit fail cleanly.
+- Logs contain no secrets or source.
+
+## M5 — GitHub, teams and staging
+
+**Goal:** real users and real repositories on a shared hosted environment, safely.
+
+- [ ] GitHub App with minimal permissions, and sign in with GitHub.
+- [ ] Workspaces, membership, invitations, and server-side authorisation on every route.
+- [ ] Repository linking with per-user GitHub access checks, and disconnection handling.
+- [ ] Analysis of GitHub repositories with safe archive extraction, and commit-pinned evidence links.
+- [ ] Minimal hosted staging environment.
+- [ ] Security review of auth, tokens, tenant isolation and untrusted source handling.
+
+**Outcome:** an invited teammate signs in on staging and explores a private repository.
+
+**Exit criteria:**
+- Automated tests prove there is no cross-tenant access and that users cannot link repositories they can't access.
+- The security review is signed off before any external user is invited.
 
 ## M6 — AI architecture assistant
 
 **Goal:** natural-language exploration based on the architecture model and findings.
 
+- [ ] AI data policy, and an AI opt-in per workspace.
 - [ ] Read-only architecture query tools, scoped to a workspace and snapshot.
-- [ ] LangGraph.js assistant with validated citations and an "insufficient evidence" response.
-- [ ] Streaming chat with clickable citations, and "Explain this finding".
-- [ ] Agent run and tool call tracing, and usage limits.
-- [ ] Evaluation harness with a fake model and a golden question set.
+- [ ] LangGraph.js assistant whose claim-level citations are validated before the answer is shown.
+- [ ] Chat with live progress, clickable citations and "Explain this finding".
+- [ ] Agent tracing and usage limits.
+- [ ] Evaluation harness and a live quality bar.
 
 **Outcome:** users ask questions and get answers that cite evidence.
 
 **Exit criteria:**
-- Every citation resolves to an explorer link.
+- The live evaluation meets the quality bar.
+- Every displayed citation resolves.
 - An AI failure never affects analysis or findings.
 
 ## M7 — Beta
 
-**Goal:** a hosted, observable and secure product for early teams.
+**Goal:** a production, observable and secure product for early teams.
 
-- [ ] Snapshot history and comparison. Optional analysis on push.
+- [ ] Snapshot comparison, and optional analysis on push.
 - [ ] Guided onboarding and starter config generation.
-- [ ] Structured logging, monitoring and health checks.
-- [ ] Hosted staging and production environments, with backups and continuous deployment.
+- [ ] Production environment with backups and continuous deployment.
+- [ ] Metrics, error monitoring and alerting.
 - [ ] End-to-end tests, rate limiting, data retention and workspace deletion.
 - [ ] Pilot with early engineering teams.
 
@@ -133,13 +145,14 @@ Every milestone ends with a **working, demoable product**. No milestone consists
 
 **Exit criteria:**
 - External teams onboard without help.
-- Errors and slow analyses are visible in monitoring.
+- Errors and slow analyses trigger alerts.
 - Pilot feedback is collected and post-beta priorities are agreed.
 
 ## After beta
 
 - Change impact analysis on pull requests.
-- Migrate workflows to Temporal when they become long-running or multi-step.
+- Ancestry-based baselines, and change-frequency hotspots from Git history.
+- Moving workflows to Temporal when they become long-running or multi-step.
 - Architecture health trends over time.
 - Additional languages via Tree-sitter.
 - Rule editing in the UI.

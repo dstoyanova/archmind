@@ -1,5 +1,7 @@
 # ArchMind — Technical Architecture
 
+> The [MVP implementation plan](plans/mvp-implementation-plan.md) proposes refinements to this document. Items marked _proposed_ are pending approval through the ADR named next to them.
+
 ## Architectural approach
 
 Start with a **modular monolith** using TypeScript.
@@ -14,11 +16,12 @@ Keep domain boundaries explicit and components independently testable. Introduce
 | Frontend               | Next.js, React                       |
 | Backend                | NestJS                               |
 | API                    | REST, OpenAPI                        |
+| Validation, contracts  | zod (_proposed_, ADR-0003)           |
 | Database               | PostgreSQL                           |
 | ORM                    | Prisma                               |
 | Code analysis          | TypeScript Compiler API, Tree-sitter |
 | AI orchestration       | LangGraph.js                         |
-| Workflow orchestration | Temporal                             |
+| Workflow orchestration | Temporal (later); pg-boss first (_proposed_, ADR-0007) |
 | Graph visualisation    | React Flow                           |
 | Styling                | Tailwind CSS                         |
 | Package manager        | pnpm                                 |
@@ -34,7 +37,8 @@ archmind/
 ├── apps/
 │   ├── web/
 │   ├── api/
-│   └── worker/
+│   ├── worker/
+│   └── cli/          # proposed, ADR-0002
 │
 ├── packages/
 │   ├── domain/
@@ -77,9 +81,11 @@ Packages should be introduced as needed rather than created as empty placeholder
 
 - **Web:** User interface and architecture visualisation.
 - **API:** Authentication, workspaces, repositories and application services.
-- **Worker:** Background repository analysis and processing.
+- **Worker:** Background repository analysis and processing. Analysis runs in an isolated child process (_proposed_, ADR-0007).
+- **CLI:** Local analysis and rule checks, including in CI (_proposed_, ADR-0002).
 - **Code Analysis:** Parse source files and extract symbols and dependencies.
-- **Architecture Engine:** Build architecture models and evaluate rules.
+- **Architecture Engine:** Build the hierarchical component model, dependency graph, metrics and cycles.
+- **Governance Engine:** Evaluate architectural rules against a snapshot and produce a rule evaluation with findings (_proposed_, ADR-0006).
 - **Agent Runtime:** Provide AI-assisted exploration and recommendations.
 - **Database:** Persist workspaces, analyses, snapshots and findings.
 
@@ -91,8 +97,8 @@ Packages should be introduced as needed rather than created as empty placeholder
 4. Parse files and extract symbols and dependencies.
 5. Resolve dependencies and construct an architecture model.
 6. Persist an immutable architecture snapshot.
-7. Evaluate architectural rules.
-8. Generate findings and make results available to the user.
+7. Evaluate architectural rules in a separate step that creates an immutable rule evaluation. Changing rules or upgrading the governance engine re-evaluates without re-analysing.
+8. Make findings available to the user. Their status (new, existing or resolved) is computed against a baseline evaluation.
 
 AI processing should be separate from deterministic analysis. An AI failure must not invalidate a completed architecture analysis.
 
