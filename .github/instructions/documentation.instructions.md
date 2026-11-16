@@ -1,28 +1,11 @@
-# Documentation and Architecture Decisions
+---
+applyTo: "docs/**"
+---
 
-Documentation is part of the implementation.
+# Documentation and ADRs
 
-Update documentation whenever a change affects:
+Update docs when a change affects architecture, domain model, public APIs, agent responsibilities, security, infrastructure or development workflow.
 
-- System architecture.
-- Domain model.
-- Public APIs.
-- Agent responsibilities.
-- Security.
-- Infrastructure.
-- Development workflows.
+ADRs live in `docs/adr/` as `ADR-NNNN-<slug>.md`. Sections: Context, Problem statement, Considered alternatives, Decision, Consequences, Status. Follow the format of the existing ADRs.
 
-Significant architecture decisions must be documented as ADRs.
-
-ADRs should contain:
-
-1. Context.
-2. Problem statement.
-3. Considered alternatives.
-4. Decision.
-5. Consequences.
-6. Status.
-
-Do not silently change established architectural decisions.
-
-If an existing ADR becomes obsolete, create a superseding ADR rather than rewriting historical decisions.
+Never rewrite an accepted ADR. Add a superseding ADR and update the old one's status only.
