@@ -1,0 +1,8 @@
+{
+  "name": "@workspace/lib",
+  "private": true,
+  "exports": {
+    ".": "./dist/index.js",
+    "./internal/*": "./dist/internal/*.js"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "ignoreDeprecations": "6.0",
+    "baseUrl": ".",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "paths": {
+      "@workspace/lib": ["../lib/src/index.ts"],
+      "@workspace/lib/*": ["../lib/src/*"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

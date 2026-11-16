@@ -1,0 +1,28 @@
+{
+  "name": "@archmind/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "archmind": "./dist/main.js"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json --outDir dist",
+    "analyze": "node ./dist/main.js analyze",
+    "benchmark:resolution": "node ./dist/main.js resolution-benchmark",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "test": "vitest run --config ../../vitest.config.ts"
+  },
+  "dependencies": {
+    "@archmind/architecture-engine": "workspace:*",
+    "@archmind/code-analysis": "workspace:*",
+    "@archmind/contracts": "workspace:*",
+    "@archmind/domain": "workspace:*",
+    "minimatch": "^10.1.1",
+    "typescript": "^5.9.3"
+  }
+}

@@ -50,3 +50,7 @@ pnpm lint
 pnpm typecheck
 pnpm test
 ```
+
+## CLI analysis (M1.9)
+
+See [docs/development/cli-analyze.md](/Users/desislava/Documents/repos/archmind/docs/development/cli-analyze.md) for full setup, command options and examples.

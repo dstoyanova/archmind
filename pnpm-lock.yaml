@@ -39,14 +39,32 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@24.19.2)
 
+  apps/cli:
+    dependencies:
+      '@archmind/architecture-engine':
+        specifier: workspace:*
+        version: link:../../packages/architecture-engine
+      '@archmind/code-analysis':
+        specifier: workspace:*
+        version: link:../../packages/code-analysis
+      '@archmind/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@archmind/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      minimatch:
+        specifier: ^10.1.1
+        version: 10.2.6
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
   packages/architecture-engine:
     dependencies:
       '@archmind/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@archmind/domain':
-        specifier: workspace:*
-        version: link:../domain
       minimatch:
         specifier: ^10.1.1
         version: 10.2.6

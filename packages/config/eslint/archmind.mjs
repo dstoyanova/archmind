@@ -41,7 +41,8 @@ const archmindConfig = [
       "**/build/**",
       "**/.turbo/**",
       "**/node_modules/**",
-      "**/coverage/**"
+      "**/coverage/**",
+      "**/fixtures/**"
     ]
   },
   js.configs.recommended,
