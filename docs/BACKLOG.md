@@ -103,8 +103,8 @@ Create `apps/cli`, fixture repositories with expected graphs, and the dev-only r
 - **Acceptance criteria:**
   - [x] `archmind analyze <path> --out snapshot.json` writes the snapshot. `--format summary` prints components, dependencies, cycles, resolution statistics and diagnostics.
   - [x] Fixtures cover: single package, monorepo with `dist` entry points, path aliases, missing `extends` base, cycles (runtime, type-only and test-only), malformed files.
-  - [ ] On at least two open-source monorepos, the unresolved rate is at most 2% and agreement with the reference tool is at least 95%. Results are recorded in `docs/development/`.
-  - [ ] Performance is measured against NFR-7.
+  - [x] On at least two open-source monorepos, the unresolved rate is at most 2% and agreement with the reference tool is at least 95%. Results are recorded in `docs/development/`.
+  - [x] Performance is measured against NFR-7.
 
 ## M2 — Local architecture explorer
 

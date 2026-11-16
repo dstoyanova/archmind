@@ -4,15 +4,15 @@
   "private": true,
   "type": "module",
   "bin": {
-    "archmind": "./dist/main.js"
+    "archmind": "./dist/src/main.js"
   },
   "exports": {
     ".": "./src/index.ts"
   },
   "scripts": {
     "build": "tsc --project tsconfig.json --outDir dist",
-    "analyze": "node ./dist/main.js analyze",
-    "benchmark:resolution": "node ./dist/main.js resolution-benchmark",
+    "analyze": "node ./dist/src/main.js analyze",
+    "benchmark:resolution": "node ./dist/src/main.js resolution-benchmark",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "test": "vitest run --config ../../vitest.config.ts"

@@ -51,6 +51,6 @@ pnpm typecheck
 pnpm test
 ```
 
-## CLI analysis (M1.9)
+## CLI analysis
 
-See [docs/development/cli-analyze.md](/Users/desislava/Documents/repos/archmind/docs/development/cli-analyze.md) for full setup, command options and examples.
+See [docs/development/cli-analyze.md](./docs/development/cli-analyze.md) for full setup, command options and examples.

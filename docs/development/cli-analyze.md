@@ -16,7 +16,7 @@ pnpm --filter @archmind/cli build
 Run:
 
 ```bash
-node apps/cli/dist/main.js analyze <path> --out <snapshot.json> [--format snapshot|summary]
+pnpm dlx tsx apps/cli/src/main.ts analyze <path> --out <snapshot.json> [--format snapshot|summary]
 ```
 
 ### Required arguments
@@ -34,13 +34,13 @@ node apps/cli/dist/main.js analyze <path> --out <snapshot.json> [--format snapsh
 Analyze the current repository and print summary output:
 
 ```bash
-node apps/cli/dist/main.js analyze . --out ./tmp/archmind-snapshot.json --format summary
+pnpm dlx tsx apps/cli/src/main.ts analyze . --out ./tmp/archmind-snapshot.json --format summary
 ```
 
 Analyze another local repository:
 
 ```bash
-node apps/cli/dist/main.js analyze /absolute/path/to/repo --out /absolute/path/to/snapshot.json
+pnpm dlx tsx apps/cli/src/main.ts analyze /absolute/path/to/repo --out /absolute/path/to/snapshot.json
 ```
 
 ## Related benchmark command
