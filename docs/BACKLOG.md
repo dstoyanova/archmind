@@ -80,10 +80,10 @@ Aggregate dependencies at the owning-component level, with evidence and counts b
 
 - **Depends on:** M1.6
 - **Acceptance criteria:**
-  - [ ] Metrics per component are computed at its own depth.
-  - [ ] Tarjan cycles are found at each hierarchy level and at file level.
-  - [ ] Test-only cycles are excluded. Cycles that exist only through type-only imports are flagged `typeOnly`.
-  - [ ] External dependencies are recorded per component.
+  - [x] Metrics per component are computed at its own depth.
+  - [x] Tarjan cycles are found at each hierarchy level and at file level.
+  - [x] Test-only cycles are excluded. Cycles that exist only through type-only imports are flagged `typeOnly`.
+  - [x] External dependencies are recorded per component.
 
 ### M1.8 Build reproducible snapshots
 
