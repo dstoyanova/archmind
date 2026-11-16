@@ -91,9 +91,9 @@ Assemble the versioned snapshot with deterministic IDs and the `contentHash` (FR
 
 - **Depends on:** M1.7
 - **Acceptance criteria:**
-  - [ ] Two runs on the same repository, and the same repository copied to a different directory, produce an identical `contentHash`. Covered by tests.
-  - [ ] Source metadata (commit SHA, branch, `commitTimestamp`, `workingTreeDirty`) is recorded but not hashed.
-  - [ ] The snapshot passes schema and invariant validation.
+  - [x] Two runs on the same repository, and the same repository copied to a different directory, produce an identical `contentHash`. Covered by tests.
+  - [x] Source metadata (commit SHA, branch, `commitTimestamp`, `workingTreeDirty`) is recorded but not hashed.
+  - [x] The snapshot passes schema and invariant validation.
 
 ### M1.9 Create the `archmind analyze` CLI and resolution benchmark
 
