@@ -70,9 +70,9 @@ Implement the hierarchical hybrid model in `packages/architecture-engine` (FR-A6
 
 - **Depends on:** M1.5
 - **Acceptance criteria:**
-  - [ ] Applies, in order: configured components, packages (depth 1), folders under component roots (depth 2), `<root>`.
-  - [ ] `componentRoots` overrides produce child components (for example, NestJS modules).
-  - [ ] Every file has exactly one owning component.
+  - [x] Applies, in order: configured components, packages (depth 1), folders under component roots (depth 2), `<root>`.
+  - [x] `componentRoots` overrides produce child components (for example, NestJS modules).
+  - [x] Every file has exactly one owning component.
 
 ### M1.7 Build the graph, metrics and cycles
 

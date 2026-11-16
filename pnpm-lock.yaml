@@ -39,6 +39,15 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@24.19.2)
 
+  packages/architecture-engine:
+    dependencies:
+      '@archmind/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      minimatch:
+        specifier: ^10.1.1
+        version: 10.2.6
+
   packages/code-analysis:
     dependencies:
       '@archmind/contracts':
