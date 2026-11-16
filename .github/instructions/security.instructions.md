@@ -10,3 +10,4 @@ applyTo: "**/auth/**,**/*.env*,.github/workflows/**,packages/config/**,apps/api/
 - GitHub integration requests minimum permissions. Repository access tokens are never exposed to the browser.
 - Do not log source code or credentials.
 - Changes to authentication, authorisation, secrets or tenant isolation need human approval and additional security review.
+- Clerk is the preferred authentication provider but is not yet approved (ADR-0009). Before implementing auth, raise the open questions in the plan's §4.13. Whichever provider is used, verify sessions server-side and keep workspace authorisation in our own database. Sign-in does not prove repository access.

@@ -130,10 +130,11 @@ Create `apps/api` (NestJS) with a file-based `SnapshotReader` adapter that reads
 
 ### M2.3 Build the architecture explorer UI
 
-Create `apps/web` (Next.js, Tailwind, React Flow) with the hierarchical graph (FR-E1, FR-E2).
+Create `apps/web` (Next.js, Tailwind, shadcn/ui, React Flow) with the hierarchical graph (FR-E1, FR-E2).
 
 - **Depends on:** M2.2
 - **Acceptance criteria:**
+  - [ ] shadcn/ui is initialised in `apps/web`. UI uses its components. Custom components exist only where shadcn/ui has no equivalent, such as React Flow nodes.
   - [ ] Auto-layout, expand and collapse, zoom, pan and search.
   - [ ] Cycle highlighting, and filters for dependency kind, file role (tests hidden by default) and type-only imports.
   - [ ] Loading, empty and error states.
@@ -290,6 +291,8 @@ Create separate development and staging GitHub Apps with `contents: read` and `m
 
 Add GitHub App user authorisation, User, Session and encrypted `GitHubUserToken`, and logout (FR-I1).
 
+> **Before starting:** Clerk (email and password, plus Sign in with GitHub) is the preferred provider. Present it to the human, resolve the open questions in the plan's §4.13, and get ADR-0009 approved. If Clerk is approved, the criteria below change: Clerk owns sessions and sign-in, and we own server-side token verification, user mapping and the GitHub access token handling.
+
 - **Depends on:** M5.1
 - **Acceptance criteria:**
   - [ ] Validates the OAuth `state` parameter.
@@ -321,6 +324,13 @@ Add installation linking, repository selection with per-user access checks, `Git
 ### M5.5 Deploy the staging environment ⚠ Approval (ADR-0011)
 
 Add Dockerfiles for `api`, `web` and `worker`, a hosting provider, managed Postgres, secrets management, HTTPS and deployment from `main`.
+
+> **Before starting:** Neon is under consideration for managed Postgres. Present it with ADR-0011 and check:
+>
+> - Use Neon's direct (unpooled) connection for Prisma migrations, and verify pg-boss against the pooled connection or use the direct one.
+> - Use a separate Neon project or branch for staging, with its own secrets.
+> - Check scale-to-zero cold starts against worker and job latency.
+> - Keep Neon-specific features out of application code.
 
 - **Depends on:** M5.1, M4.7
 - **Acceptance criteria:**

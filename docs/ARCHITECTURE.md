@@ -24,6 +24,9 @@ Keep domain boundaries explicit and components independently testable. Introduce
 | Workflow orchestration | Temporal (later); pg-boss first (_proposed_, ADR-0007) |
 | Graph visualisation    | React Flow                           |
 | Styling                | Tailwind CSS                         |
+| UI components          | shadcn/ui                            |
+| Authentication         | Clerk (_proposed_, ADR-0009)         |
+| Database hosting       | Neon (_under consideration_, ADR-0011) |
 | Package manager        | pnpm                                 |
 | Monorepo tooling       | Turborepo                            |
 | Testing                | Vitest, Playwright                   |

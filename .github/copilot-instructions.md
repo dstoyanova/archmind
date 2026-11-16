@@ -8,9 +8,24 @@ Principles: evidence before opinions; deterministic analysis before AI interpret
 
 Implemented: `packages/domain`, `packages/contracts`, `packages/code-analysis`, `packages/config`. Delivery order is analysis-first and CLI-first ([ADR-0002](../docs/adr/ADR-0002-analysis-first-delivery-order-and-cli.md)).
 
-Planned, not yet present: `apps/*`, NestJS, Next.js, Prisma/PostgreSQL, Temporal, LangGraph.js. Do not create packages, directories or dependencies for them without an implementation need.
+Planned, not yet present: `apps/*`, NestJS, Next.js, Prisma/PostgreSQL, pg-boss (Temporal later), LangGraph.js. Do not create packages, directories or dependencies for them without an implementation need.
 
-Read before architectural work: [ARCHITECTURE.md](../docs/ARCHITECTURE.md), [ROADMAP.md](../docs/ROADMAP.md), `docs/adr/`.
+Read before architectural work: [ARCHITECTURE.md](../docs/ARCHITECTURE.md), [ROADMAP.md](../docs/ROADMAP.md), [BACKLOG.md](../docs/BACKLOG.md), [MVP plan](../docs/plans/mvp-implementation-plan.md), `docs/adr/`.
+
+## Technology decisions to raise
+
+Decided: **shadcn/ui** for UI components; **Prisma** stays as the ORM (Drizzle was rejected, do not re-propose it).
+
+Pending: **Clerk** for authentication (email and password, plus GitHub sign-in) and **Neon** for managed Postgres. Do not implement either until the human approves the ADR.
+
+When you start work that touches one of these, say so up front, summarise the open questions and ask for approval before writing code:
+
+| Starting work on | Raise |
+| --- | --- |
+| `apps/web`, any UI (M2.3, M3.5, M4.6) | Use shadcn/ui components. Custom components only where it has no equivalent. |
+| Authentication, sessions, users, workspace membership (M5.1 to M5.3) | Clerk. Resolve the open questions in the plan's §4.13, then approve ADR-0009. |
+| GitHub App, per-user repository access (M5.1, M5.4) | Clerk sign-in does not prove repository access. See §4.13. |
+| Hosting, staging, managed Postgres, `packages/database` deployment (M5.5) | Neon. Approve ADR-0011. Direct connection for Prisma migrations and pg-boss. |
 
 ## Commands
 

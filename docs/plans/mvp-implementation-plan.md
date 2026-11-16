@@ -41,9 +41,11 @@ Every milestone ends with a **working, demoable product**. No milestone consists
 | Governance              | Declarative rules evaluated by a pure engine into immutable **rule evaluations** that own findings            | Rule or engine changes never require re-analysis or mutation of a snapshot.                                    | ADR-0006 |
 | Background jobs         | Postgres-backed queue (pg-boss) behind a `JobQueue` interface; analysis runs in an isolated child process   | No extra infrastructure. Enforceable timeouts and memory caps. Credentials kept away from untrusted input.    | ADR-0007 |
 | Snapshot storage        | Relational core (components, dependencies, findings) plus a compressed snapshot document per unique `contentHash` | Keeps queries simple while bounding storage growth as push-triggered analysis lands.                          | ADR-0008 |
-| Authentication          | Sign in with GitHub (GitHub App user authorisation) and server-side sessions                                 | Target users already use GitHub. No password handling.                                                        | ADR-0009 |
+| Authentication          | **Clerk** (email and password, plus Sign in with GitHub) _preferred, pending ADR-0009_. GitHub App for repository access | Avoids building sessions, password reset and OAuth. Repository access still needs its own GitHub App flow (see §4.13). | ADR-0009 |
 | Tenancy and sharing     | Workspace is the isolation and sharing boundary. Repository linking requires the user's own GitHub access     | Clear, testable isolation. Prevents users from linking repositories they cannot read.                         | ADR-0010 |
-| Hosting                 | Docker Compose locally; minimal hosted staging in M5; production in M7                                       | GitHub callbacks and webhooks need public URLs, and real users need a shared environment.                      | ADR-0011 |
+| Hosting                 | Docker Compose locally; minimal hosted staging in M5; production in M7. **Neon** for managed Postgres _under consideration_ | GitHub callbacks and webhooks need public URLs, and real users need a shared environment. Neon is plain PostgreSQL, so it stays a hosting choice. | ADR-0011 |
+| UI components           | **shadcn/ui** (Radix and Tailwind), copied into `apps/web`                                                    | Reuse accessible, pre-built components instead of building them from scratch.                                  | None     |
+| ORM                     | **Prisma** (retained). Drizzle was considered and rejected on 2026-11-16                                      | Already assumed throughout the plan. Do not re-propose an ORM change without new evidence.                     | None     |
 | LLM provider and data   | Provider-agnostic (LangChain chat model interface). AI is opt-in per workspace and never receives file contents | Avoids lock-in. Makes data sharing an explicit, informed owner decision.                                      | ADR-0012 |
 
 Decisions that change architectural boundaries, add major dependencies or touch auth/tenancy require human approval before implementation (see §9).
@@ -439,6 +441,16 @@ Conventions:
 
 ### 4.13 Security model
 
+> **Pending change (ADR-0009).** Clerk is the preferred authentication provider (email and password, plus Sign in with GitHub). If approved, Clerk replaces the custom OAuth, session and cookie handling below. The following stay our responsibility, and ADR-0009 must answer the open questions before M5.2 starts:
+>
+> - Verify the Clerk session token server-side in the API, and keep `WorkspaceMemberGuard` and `workspaceId` filtering in our own database.
+> - Map Clerk users to our `User` and `Workspace` records, for example through Clerk webhooks. Decide whether Clerk Organizations are used or workspace membership stays in our database.
+> - Sign-in only identifies the user. Per-user repository access checks (FR-I4) still need GitHub access that proves what the user can read. Decide between the GitHub token stored by Clerk and a separate GitHub App user authorisation.
+> - Keep GitHub tokens out of the browser and encrypted at rest.
+> - Keep CSRF and origin checks if cookies authenticate API calls.
+> - Invitations are accepted by the invited GitHub login today. Decide how this works for email and password users.
+> - Ordinary tests mock Clerk. Dev and staging use separate Clerk instances.
+
 - **Authentication.** GitHub App user authorisation (OAuth) with a `state` parameter.
   - Sessions are stored server-side, with a hashed token in a `httpOnly`, `Secure`, `SameSite=Lax` cookie.
   - State-changing requests are protected by an origin check plus a CSRF token.
@@ -649,9 +661,9 @@ These items need human approval before work starts, because of the project's rul
 | 6 | Governance rules and rule evaluations | ADR-0006 | M3 |
 | 7 | pg-boss instead of Temporal for the MVP, and isolated analysis execution | ADR-0007 | M4 |
 | 8 | Snapshot storage model | ADR-0008 | M4 |
-| 9 | GitHub App permissions, authentication and sessions | ADR-0009 | M5 |
+| 9 | GitHub App permissions, authentication (Clerk preferred) and sessions | ADR-0009 | M5 |
 | 10 | Tenant isolation, sharing and repository access model | ADR-0010 | M5 |
-| 11 | Hosting provider and staging environment | ADR-0011 | M5 |
+| 11 | Hosting provider and staging environment (Neon under consideration) | ADR-0011 | M5 |
 | 12 | First LLM provider and AI data policy | ADR-0012 | M6 |
 
 Small libraries are confirmed in the task that introduces them:
