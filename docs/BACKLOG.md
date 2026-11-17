@@ -108,48 +108,97 @@ Create `apps/cli`, fixture repositories with expected graphs, and the dev-only r
 
 ## M2 — Local architecture explorer
 
-### M2.1 Define explorer API contracts
+### M2.1 Add explorer graph functions to `domain`
 
-Define zod view models for the projected component graph, file graph, component detail and dependency evidence, and generate OpenAPI from them.
+Add the graph functions the explorer needs to `packages/domain`, so the API, the governance engine and the agent share one implementation (§4.2).
 
-- **Depends on:** M1.8
+- **Depends on:** M1.7
 - **Acceptance criteria:**
-  - [ ] View models support depth, expanded components, role filters and the type-only toggle.
-  - [ ] Unit tests cover the mappings.
+  - [ ] Cycles, with the `typeOnly` flag, can be computed for any projected graph: any depth, expanded set and filters. `architecture-engine` uses the same function, and snapshot output is unchanged (the golden `contentHash` test still passes).
+  - [ ] A file-level projection for a component returns the files in its subtree and the imports between them. Imports into other components become edges to those components as currently projected.
+  - [ ] A snapshot can be validated and indexed once and then projected many times, instead of `projectGraph` re-checking invariants and rebuilding indexes on every call.
+  - [ ] Unit tests cover a cycle that appears only after expanding a component, cycles removed by role and type-only filters, and the file-level projection.
 
-### M2.2 Create the read-only explorer API
+### M2.2 Define explorer API contracts ⚠ Approval (ADR-0003 addendum)
 
-Create `apps/api` (NestJS) with a file-based `SnapshotReader` adapter that reads from `ARCHMIND_SNAPSHOT_DIR`.
+Define zod view models for the snapshot list and overview, the projected component graph, the file graph, component detail and dependency evidence, and generate OpenAPI from them.
+
+> **Before starting:** ADR-0003 does not yet name the NestJS integration or the OpenAPI generator. Choose both (they must support the `zod` version used in `contracts`) and record them in an ADR-0003 addendum.
 
 - **Depends on:** M2.1
 - **Acceptance criteria:**
-  - [ ] Implements the M2 endpoints under `/api/workspaces/local/...`.
-  - [ ] Validates input with zod pipes and returns consistent errors.
-  - [ ] Serves Swagger UI at `/api/docs`.
-  - [ ] Integration tests run against fixture snapshots.
+  - [ ] Graph requests support depth, expanded components, role filters and the type-only toggle. The default is the production graph (`source` files, type-only imports included), so the default view matches the stored metrics and cycles.
+  - [ ] The graph response contains the cycles of the projected graph and, per edge, the weight and counts by kind and role. It contains no evidence import IDs. External dependencies of visible components are included, so the UI can filter internal and external dependencies (FR-E2).
+  - [ ] Projected edges are addressed by their endpoints, because they have no stored ID. Evidence is a cursor-paginated list of `{ filePath, line, column, specifier, kind, role }`, the compact shape M4 stores. Component file lists and diagnostics are also paginated.
+  - [ ] Component metrics are described as production-graph values at the component's own depth, unaffected by filters.
+  - [ ] Snapshot IDs do not depend on `contentHash`, because several M4 snapshots can share one. The snapshot list shows enough to tell snapshots apart. Decide whether to add a non-hashed `source.repositoryName`. If added, record it in an ADR-0004 addendum.
+  - [ ] Errors use `{ error: { code, message, details? } }`.
+  - [ ] Unit tests cover the mappings.
 
-### M2.3 Build the architecture explorer UI
+### M2.3 Create the read-only explorer API ⚠ Approval (ADR-0001 addendum)
 
-Create `apps/web` (Next.js, Tailwind, shadcn/ui, React Flow) with the hierarchical graph (FR-E1, FR-E2).
+Create `apps/api` (NestJS) with a file-based `SnapshotReader` adapter that reads from `ARCHMIND_SNAPSHOT_DIR`.
+
+> **Before starting:** packages export TypeScript source (`./src/index.ts`), and the repository runs code with `tsx`. `tsx` uses esbuild, which does not emit decorator metadata, so NestJS injection by type silently fails. Choose how `apps/api` and `apps/web` are built and run (for example, the Nest CLI with SWC, or explicit `@Inject` tokens), add `dev` and `build` tasks to `turbo.json`, and record the choice in an ADR-0001 addendum.
 
 - **Depends on:** M2.2
 - **Acceptance criteria:**
-  - [ ] shadcn/ui is initialised in `apps/web`. UI uses its components. Custom components exist only where shadcn/ui has no equivalent, such as React Flow nodes.
-  - [ ] Auto-layout, expand and collapse, zoom, pan and search.
-  - [ ] Cycle highlighting, and filters for dependency kind, file role (tests hidden by default) and type-only imports.
-  - [ ] Loading, empty and error states.
-  - [ ] Usable with 300 components and 3,000 dependencies.
+  - [ ] Implements the M2 endpoints under `/api/workspaces/local/...`. Any other workspace ID returns `404`.
+  - [ ] Modules are organised by bounded context under `src/modules/`.
+  - [ ] Snapshot files are validated when loaded: schema, invariants, `verifyContentHash` and a supported `schemaVersion`. Invalid files are listed with the reason and never crash the API. `*.evaluation.json` files are ignored.
+  - [ ] Snapshot IDs map to files only through the directory listing. Request values are never used as paths. Files above a size limit are rejected.
+  - [ ] Snapshots are loaded on demand into a bounded cache, and validated and indexed once per load.
+  - [ ] Binds to `127.0.0.1` by default. Cross-origin requests are allowed only from the configured web origin.
+  - [ ] Validates input with zod pipes and returns consistent errors.
+  - [ ] Serves Swagger UI at `/api/docs`.
+  - [ ] Integration tests run against fixture snapshots generated from the CLI fixtures (not committed, so they never go stale), plus invalid, tampered and oversized files.
 
-### M2.4 Add component and dependency details
+### M2.4 Build the architecture explorer UI
 
-Add a side panel and drill-down navigation (FR-E3, FR-E4, FR-E5).
+Create `apps/web` (Next.js, Tailwind, shadcn/ui, React Flow) with the hierarchical graph (FR-E1, FR-E2).
+
+> **Before starting:** confirm the graph layout library and the data-fetching approach (§9). An expanded component stays visible next to its children, so the layout must support nested nodes (elkjs rather than dagre). Next.js must compile the workspace packages (`transpilePackages`, `.js` to `.ts` import mapping).
 
 - **Depends on:** M2.3
 - **Acceptance criteria:**
-  - [ ] The panel shows metrics, files, child components, inbound and outbound dependencies, and evidence (file:line, kind).
+  - [ ] shadcn/ui is initialised in `apps/web`. UI uses its components. Custom components exist only where shadcn/ui has no equivalent, such as React Flow nodes.
+  - [ ] Auto-layout with nested components, expand and collapse, zoom, pan, and search by component name and path. File search is out of scope for M2.
+  - [ ] Cycle highlighting of members and the edges between them, with `typeOnly` cycles styled differently.
+  - [ ] Filters for internal and external dependencies, file role and type-only imports. The default shows the production graph.
+  - [ ] Loading, empty and error states, including invalid snapshot files.
+  - [ ] Playwright is set up with the API and web app running against a fixture snapshot directory, and runs in CI.
+  - [ ] With a generated snapshot of 300 components and 3,000 dependencies, the first render takes under 2 seconds and each expand or collapse under 500 ms on a developer laptop (provisional budgets). Results are recorded in `docs/development/`.
+
+### M2.5 Add snapshot overview, component and dependency details
+
+Add a snapshot overview, a side panel and drill-down navigation (FR-E3, FR-E4, FR-E5). Exported symbols are not shown in M2.
+
+- **Depends on:** M2.4
+- **Acceptance criteria:**
+  - [ ] The panel shows metrics (labelled as production-graph values), files, child components, inbound and outbound dependencies, external dependencies, and evidence (file:line, kind).
   - [ ] Drill-down from a component to its file graph works.
+  - [ ] The snapshot overview shows versions, source metadata, resolution statistics and diagnostics, so missing edges can be explained (for example `WORKSPACE_ENTRY_UNMAPPED` or `IMPORT_TARGET_EXCLUDED`).
   - [ ] An accessible list alternative exists (NFR-14).
-  - [ ] A Playwright smoke test covers the flow.
+  - [ ] A Playwright smoke test covers opening a snapshot, expanding a component, viewing evidence and drilling down to files.
+
+### M2.6 Configure ArchMind's self-analysis
+
+Add a root `archmind.config.json`, so ArchMind's own bounded contexts appear as child components, and an `analysis.exclude` setting so test fixtures are not analysed.
+
+- **Depends on:** M2.3
+- **Acceptance criteria:**
+  - [ ] An `analysis.exclude` glob list in `archmind.config.json` is applied by the source provider, so it is part of `analysisConfigHash` and `sourceHash`, and an import into an excluded file still gets `IMPORT_TARGET_EXCLUDED`. The field is recorded in an ADR-0005 addendum.
+  - [ ] The root config sets `componentRoots` for `apps/api` (`src/modules`) and excludes `apps/cli/fixtures/**`.
+  - [ ] Analysing ArchMind shows each `apps/api` module as a child component and no fixture components. CI analyses the ArchMind repository itself.
+
+### M2.7 Validate the hierarchy on real repositories
+
+Check that the inferred hierarchy makes sense to people (§7, "The inferred hierarchy is not meaningful to users").
+
+- **Depends on:** M2.5, M2.6
+- **Acceptance criteria:**
+  - [ ] ArchMind, vitest and changesets are explored with the default hierarchy, and with `componentRoots` where the default is unhelpful.
+  - [ ] Observations, such as noisy folder components, misleading names or missing edges, are recorded in `docs/development/` with follow-up backlog items.
 
 ## M3 — Local governance
 
@@ -178,19 +227,18 @@ Create `packages/governance-engine`: a pure `evaluate(snapshot, rules, version)`
 
 Evaluate rules for a path or an existing snapshot. Write an evaluation document and compare it with an optional baseline (FR-G5, FR-G7).
 
-- **Depends on:** M3.2, M1.9
+- **Depends on:** M3.2, M1.9, M2.6
 - **Acceptance criteria:**
   - [ ] `--fail-on <severity>` sets the exit code. `--baseline <evaluation.json> --new-only` counts only new findings.
   - [ ] `compareEvaluations` (in `domain`) classifies findings as new, existing or resolved, and flags `rulesChanged`.
   - [ ] Editing only rules reuses the existing snapshot.
-  - [ ] Self-analysis ignores test fixtures. Add an `analysis.exclude` glob list to `archmind.config.json` (applied by the source provider, so it is part of `analysisConfigHash` and `sourceHash`, and an import into an excluded file still gets `IMPORT_TARGET_EXCLUDED`). ArchMind's own config excludes `apps/cli/fixtures/**`. Record the new config field in ADR-0005 or an addendum.
   - [ ] ArchMind's own CI runs `archmind check` and passes.
 
 ### M3.4 Serve findings from the explorer API
 
 Add a file-based `EvaluationReader` and the M3 endpoints: evaluations, findings with an optional baseline, finding detail and health summary.
 
-- **Depends on:** M3.3, M2.2
+- **Depends on:** M3.3, M2.3
 - **Acceptance criteria:**
   - [ ] Findings are paginated and filterable.
   - [ ] Status is computed on read when a baseline is given.
@@ -200,7 +248,7 @@ Add a file-based `EvaluationReader` and the M3 endpoints: evaluations, findings 
 
 Add a findings list and detail view, graph highlighting and a health summary (FR-G6).
 
-- **Depends on:** M3.4, M2.4
+- **Depends on:** M3.4, M2.5
 - **Acceptance criteria:**
   - [ ] You can jump from a finding to the affected components and to the evidence.
   - [ ] Covered by a Playwright test.

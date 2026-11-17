@@ -26,15 +26,15 @@ Every milestone ends with a **working, demoable product**. No milestone consists
 
 **Goal:** prove the analysis engine on real TypeScript repositories.
 
-- [ ] Monorepo, shared tooling configuration and CI.
-- [ ] Domain model, plus snapshot and config schemas (zod).
-- [ ] Source file discovery and file roles (source, test, story, script, config).
-- [ ] Import extraction with import kinds (including type-only), and exported-symbol extraction.
-- [ ] Module resolution without installing dependencies, with resolution statistics.
-- [ ] Hierarchical component mapping: packages, then folders, overridable by `archmind.config.json`.
-- [ ] Dependency graph with evidence, metrics and cycles, computed on the production graph.
-- [ ] Reproducible, versioned snapshot builder.
-- [ ] `archmind analyze` CLI, fixture repositories and a resolution benchmark.
+- [x] Monorepo, shared tooling configuration and CI.
+- [x] Domain model, plus snapshot and config schemas (zod).
+- [x] Source file discovery and file roles (source, test, story, script, config).
+- [x] Import extraction with import kinds (including type-only), and exported-symbol extraction.
+- [x] Module resolution without installing dependencies, with resolution statistics.
+- [x] Hierarchical component mapping: packages, then folders, overridable by `archmind.config.json`.
+- [x] Dependency graph with evidence, metrics and cycles, computed on the production graph.
+- [x] Reproducible, versioned snapshot builder.
+- [x] `archmind analyze` CLI, fixture repositories and a resolution benchmark.
 
 **Outcome:** `archmind analyze <path> --out snapshot.json` describes the architecture of a local TypeScript repository.
 
@@ -50,10 +50,13 @@ Every milestone ends with a **working, demoable product**. No milestone consists
 
 **Goal:** make snapshots explorable and check that the inferred hierarchy makes sense to people.
 
+- [ ] Shared explorer graph functions in `domain`: cycles on any projected graph, and file-level projection.
 - [ ] Explorer API contracts and OpenAPI.
-- [ ] Read-only NestJS API serving snapshot files from a directory.
+- [ ] Read-only NestJS API serving validated snapshot files from a directory.
 - [ ] Interactive hierarchical graph: auto-layout, expand and collapse, search, cycle highlighting, and filters for file role and type-only imports.
-- [ ] Component details, dependency evidence and drill-down to files.
+- [ ] Snapshot overview, component details, dependency evidence and drill-down to files.
+- [ ] ArchMind's own `archmind.config.json`, with `componentRoots` and `analysis.exclude`.
+- [ ] The inferred hierarchy is validated on real repositories.
 
 **Outcome:** browse the architecture of any repository analysed in M1.
 

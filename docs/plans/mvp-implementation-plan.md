@@ -311,7 +311,7 @@ Repositories are analysed as checked out. Nothing is installed or built, and the
 - **Production graph:** imports from `source` files, including type-only imports, which are marked as such.
   - Default metrics, cycles and rules use this graph.
   - A cycle is flagged `typeOnly` when it disappears once type-only edges are removed.
-  - The explorer hides tests by default and can toggle roles and type-only imports.
+  - The explorer shows the production graph by default (`source` files, so tests are hidden) and can toggle roles and type-only imports. Stored metrics always describe the production graph.
 
 ### 4.8 Persistence model
 
@@ -383,14 +383,14 @@ All tenant data is served under `/api/workspaces/:workspaceId/...` from M2 onwar
 - **M4:** the seeded default workspace, read from Postgres.
 - **M5:** real workspaces, checked by `WorkspaceMemberGuard`.
 
-| M   | Endpoints (relative to the workspace unless they start with `/auth` or `/github`)                                                                                                                                                                                                                                                                                                                   |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M2  | `GET /snapshots`, `GET /snapshots/:id`, `GET /snapshots/:id/graph?depth=&expand=&roles=&includeTypeOnly=&level=component\|file&componentId=`, `GET /snapshots/:id/components/:componentId`, `GET /snapshots/:id/dependencies/:dependencyId`                                                                                                                                                         |
-| M3  | `GET /snapshots/:id/evaluations`, `GET /evaluations/:id`, `GET /evaluations/:id/findings?severity=&ruleId=&baseline=&status=&cursor=`, `GET /findings/:id`, `GET /evaluations/:id/health`                                                                                                                                                                                                           |
-| M4  | `GET/POST /repositories`, `GET /repositories/:id`, `POST /repositories/:id/analyses` (returns `202 { runId }`), `GET /analysis-runs/:id`, `GET /repositories/:id/snapshots` (paginated), `POST /snapshots/:id/evaluations` (re-evaluate)                                                                                                                                                            |
-| M5  | `GET /auth/github/login`, `GET /auth/github/callback`, `POST /auth/logout`, `GET /me`, `GET/POST /workspaces`, `GET /members`, `PATCH/DELETE /members/:userId`, `GET/POST /invitations`, `DELETE /invitations/:id`, `POST /invitations/accept` (token in body), `POST /github/webhooks`, `GET/POST /github/installations`, `GET /github/installations/:id/repositories`, `DELETE /repositories/:id` |
-| M6  | `GET/PUT /settings/ai`, `GET/POST /conversations`, `GET /conversations/:id`, `POST /conversations/:id/messages` (SSE progress, then the validated answer), `GET /agent-runs/:id`                                                                                                                                                                                                                    |
-| M7  | `GET /snapshots/:baseId/compare/:headId`, `DELETE /workspaces/:id`                                                                                                                                                                                                                                                                                                                                  |
+| M   | Endpoints (relative to the workspace unless they start with `/auth` or `/github`)                                                                                                                                                                                                                                                                                                                                                                    |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M2  | `GET /snapshots`, `GET /snapshots/:id` (overview), `GET /snapshots/:id/diagnostics?cursor=`, `GET /snapshots/:id/graph?depth=&expand=&roles=&includeTypeOnly=&level=component\|file&componentId=`, `GET /snapshots/:id/components/:componentId`, `GET /snapshots/:id/components/:componentId/files?cursor=`, `GET /snapshots/:id/dependencies?from=&to=&roles=&includeTypeOnly=&cursor=` (evidence for a projected edge, addressed by its endpoints) |
+| M3  | `GET /snapshots/:id/evaluations`, `GET /evaluations/:id`, `GET /evaluations/:id/findings?severity=&ruleId=&baseline=&status=&cursor=`, `GET /findings/:id`, `GET /evaluations/:id/health`                                                                                                                                                                                                                                                            |
+| M4  | `GET/POST /repositories`, `GET /repositories/:id`, `POST /repositories/:id/analyses` (returns `202 { runId }`), `GET /analysis-runs/:id`, `GET /repositories/:id/snapshots` (paginated), `POST /snapshots/:id/evaluations` (re-evaluate)                                                                                                                                                                                                             |
+| M5  | `GET /auth/github/login`, `GET /auth/github/callback`, `POST /auth/logout`, `GET /me`, `GET/POST /workspaces`, `GET /members`, `PATCH/DELETE /members/:userId`, `GET/POST /invitations`, `DELETE /invitations/:id`, `POST /invitations/accept` (token in body), `POST /github/webhooks`, `GET/POST /github/installations`, `GET /github/installations/:id/repositories`, `DELETE /repositories/:id`                                                  |
+| M6  | `GET/PUT /settings/ai`, `GET/POST /conversations`, `GET /conversations/:id`, `POST /conversations/:id/messages` (SSE progress, then the validated answer), `GET /agent-runs/:id`                                                                                                                                                                                                                                                                     |
+| M7  | `GET /snapshots/:baseId/compare/:headId`, `DELETE /workspaces/:id`                                                                                                                                                                                                                                                                                                                                                                                   |
 
 Conventions:
 
@@ -398,6 +398,8 @@ Conventions:
 - Collections use cursor pagination.
 - Requests are validated with zod-based pipes.
 - OpenAPI is generated from the zod contracts and served at `/api/docs`.
+- Graph endpoints default to the production graph (`roles=source`, type-only imports included). Graph responses carry counts, not evidence; evidence is fetched per edge and paginated.
+- Snapshot IDs do not depend on `contentHash`, because several snapshots can share one content hash from M4.
 
 ### 4.12 AI assistant
 
@@ -501,9 +503,12 @@ Detailed tasks and acceptance criteria are in the [backlog](../BACKLOG.md). Each
 
 - **Goal:** make snapshots explorable, and check that the inferred hierarchy makes sense to people.
 - **Scope:**
+  - Explorer graph functions in `domain`: cycles on any projected graph, and file-level projection.
   - Explorer contracts.
   - Read-only NestJS API over a snapshot directory.
   - Next.js explorer: hierarchical graph, expand and collapse, cycles, filters (roles, type-only), search, details, evidence and file-level drill-down.
+  - ArchMind's own `archmind.config.json`, with `componentRoots` and `analysis.exclude`.
+  - Validation of the inferred hierarchy on real repositories, recorded in `docs/development/`.
 - **Exit criteria:**
   - Running `pnpm dev` with `ARCHMIND_SNAPSHOT_DIR` set lets you browse any M1 snapshot.
   - ArchMind's own bounded contexts are visible as child components.
@@ -608,15 +613,15 @@ Detailed tasks and acceptance criteria are in the [backlog](../BACKLOG.md). Each
 
 ## 6. Testing strategy per milestone
 
-| M   | Unit                                                                                                               | Integration                                                                                                                         | E2E                                                              |
-| --- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| M1  | Extraction and import kinds, roles, resolution strategies, hierarchy mapping, projection, metrics, Tarjan, hashing | CLI against fixture repositories with expected graphs. Reproducibility across directories. Resolution benchmark (manual, dev-only). | —                                                                |
-| M2  | Graph view-model mapping, projection filters                                                                       | API against fixture snapshots                                                                                                       | Smoke test: open the explorer, expand a component, view evidence |
-| M3  | Every rule type, fingerprint stability, evaluation comparison, config validation errors                            | `archmind check` against violation fixtures, with and without a baseline                                                            | View a finding and jump to the graph                             |
-| M4  | Run state machine, idempotency keys, baseline selection                                                            | Prisma repositories, worker pipeline, child-process timeout and memory kill, reaper (test Postgres in Docker)                       | Add repository, analyse, view findings and history               |
-| M5  | Guard, session and invitation logic                                                                                | Cross-tenant access matrix, repository access checks, webhook signatures, malicious archive fixtures                                | Sign-in and invitation acceptance (GitHub mocked)                |
-| M6  | Citation validation, context binding, data-policy enforcement (fake model)                                         | Agent with fake model and real query services                                                                                       | Enable AI, ask a question, click a citation                      |
-| M7  | Snapshot diff                                                                                                      | Push webhook to analysis                                                                                                            | All core journeys (see the backlog)                              |
+| M   | Unit                                                                                                               | Integration                                                                                                                         | E2E                                                                                   |
+| --- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| M1  | Extraction and import kinds, roles, resolution strategies, hierarchy mapping, projection, metrics, Tarjan, hashing | CLI against fixture repositories with expected graphs. Reproducibility across directories. Resolution benchmark (manual, dev-only). | —                                                                                     |
+| M2  | Graph view-model mapping, projection filters, cycles on projected graphs, file-level projection                    | API against fixture snapshots, including invalid, tampered and oversized files                                                      | Smoke test: open the explorer, expand a component, view evidence, drill down to files |
+| M3  | Every rule type, fingerprint stability, evaluation comparison, config validation errors                            | `archmind check` against violation fixtures, with and without a baseline                                                            | View a finding and jump to the graph                                                  |
+| M4  | Run state machine, idempotency keys, baseline selection                                                            | Prisma repositories, worker pipeline, child-process timeout and memory kill, reaper (test Postgres in Docker)                       | Add repository, analyse, view findings and history                                    |
+| M5  | Guard, session and invitation logic                                                                                | Cross-tenant access matrix, repository access checks, webhook signatures, malicious archive fixtures                                | Sign-in and invitation acceptance (GitHub mocked)                                     |
+| M6  | Citation validation, context binding, data-policy enforcement (fake model)                                         | Agent with fake model and real query services                                                                                       | Enable AI, ask a question, click a citation                                           |
+| M7  | Snapshot diff                                                                                                      | Push webhook to analysis                                                                                                            | All core journeys (see the backlog)                                                   |
 
 The [testing instructions](../../.github/instructions/testing.instructions.md) apply throughout:
 
@@ -654,20 +659,21 @@ The [testing instructions](../../.github/instructions/testing.instructions.md) a
 
 These items need human approval before work starts, because of the project's rules on boundaries, dependencies, auth and infrastructure. Each one is documented as an ADR in `docs/adr/`.
 
-| #   | Decision                                                                                                    | ADR      | Needed by |
-| --- | ----------------------------------------------------------------------------------------------------------- | -------- | --------- |
-| 1   | Modular monolith and package layout                                                                         | ADR-0001 | M1        |
-| 2   | Analysis-first delivery and the new `apps/cli`                                                              | ADR-0002 | M1        |
-| 3   | zod for schemas and validation, with a NestJS integration and OpenAPI generator (replacing class-validator) | ADR-0003 | M1        |
-| 4   | Snapshot format, identity and hashing                                                                       | ADR-0004 | M1        |
-| 5   | Hierarchical component model and file roles                                                                 | ADR-0005 | M1        |
-| 6   | Governance rules and rule evaluations                                                                       | ADR-0006 | M3        |
-| 7   | pg-boss instead of Temporal for the MVP, and isolated analysis execution                                    | ADR-0007 | M4        |
-| 8   | Snapshot storage model                                                                                      | ADR-0008 | M4        |
-| 9   | GitHub App permissions, authentication (Clerk preferred) and sessions                                       | ADR-0009 | M5        |
-| 10  | Tenant isolation, sharing and repository access model                                                       | ADR-0010 | M5        |
-| 11  | Hosting provider and staging environment (Neon under consideration)                                         | ADR-0011 | M5        |
-| 12  | First LLM provider and AI data policy                                                                       | ADR-0012 | M6        |
+| #   | Decision                                                                                                                                                                       | ADR               | Needed by         |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------- | ----------------- |
+| 1   | Modular monolith and package layout                                                                                                                                            | ADR-0001          | M1                |
+| 2   | Analysis-first delivery and the new `apps/cli`                                                                                                                                 | ADR-0002          | M1                |
+| 3   | zod for schemas and validation, with a NestJS integration and OpenAPI generator (replacing class-validator). The integration and generator libraries are chosen in an addendum | ADR-0003          | M1 (addendum: M2) |
+| 4   | Snapshot format, identity and hashing                                                                                                                                          | ADR-0004          | M1                |
+| 5   | Hierarchical component model and file roles                                                                                                                                    | ADR-0005          | M1                |
+| 6   | Governance rules and rule evaluations                                                                                                                                          | ADR-0006          | M3                |
+| 7   | pg-boss instead of Temporal for the MVP, and isolated analysis execution                                                                                                       | ADR-0007          | M4                |
+| 8   | Snapshot storage model                                                                                                                                                         | ADR-0008          | M4                |
+| 9   | GitHub App permissions, authentication (Clerk preferred) and sessions                                                                                                          | ADR-0009          | M5                |
+| 10  | Tenant isolation, sharing and repository access model                                                                                                                          | ADR-0010          | M5                |
+| 11  | Hosting provider and staging environment (Neon under consideration)                                                                                                            | ADR-0011          | M5                |
+| 12  | First LLM provider and AI data policy                                                                                                                                          | ADR-0012          | M6                |
+| 13  | How `apps/api` and `apps/web` are built and run (NestJS decorator metadata, workspace packages exported as TypeScript source)                                                  | ADR-0001 addendum | M2                |
 
 Small libraries are confirmed in the task that introduces them:
 
@@ -686,6 +692,7 @@ Small libraries are confirmed in the task that introduces them:
 
 ## 11. Revision history
 
+- **Revision 3 (2026-11-17):** M2 refined after the M1 implementation and review. Explorer graph functions move to `domain` first. Projected edges are addressed by their endpoints, and evidence is paginated. The default view is the production graph. Snapshot files are validated on load. ArchMind's self-analysis config and `analysis.exclude` move from M3 to M2, and hierarchy validation becomes an explicit task. The NestJS and OpenAPI libraries and the app build setup need approval.
 - **Revision 2 (2026-11-15):** changes made in response to a review of revision 1.
   - **Snapshots:** `contentHash` is now reproducible across checkouts. Components are hierarchical. Module resolution has an explicit install-free strategy with a measurable bar. File roles and import kinds are classified.
   - **Sequencing:** governance moved to M3, before the platform. Minimal staging and structured logging moved earlier, to M5 and M4.
