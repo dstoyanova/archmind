@@ -7,7 +7,8 @@ import {
   PARSE_STATUSES,
   SOURCE_KINDS,
   SYMBOL_KINDS,
-  validateSnapshotInvariants
+  validateSnapshotInvariants,
+  type ArchitectureSnapshot
 } from "@archmind/domain";
 import { z } from "zod";
 
@@ -128,6 +129,8 @@ const snapshotSourceSchema = z.object({
   workingTreeDirty: z.boolean().optional()
 });
 
+// `satisfies` fails the build when the schema stops producing the domain `ArchitectureSnapshot`;
+// the opposite direction is covered by a type test in snapshot-schema.test.ts.
 export const architectureSnapshotSchema = z
   .object({
     schemaVersion: z.string().min(1),
@@ -155,6 +158,6 @@ export const architectureSnapshotSchema = z
         message: `${error.code}: ${error.message}`
       });
     }
-  });
+  }) satisfies z.ZodType<ArchitectureSnapshot, z.ZodTypeDef, unknown>;
 
 export type ArchitectureSnapshotDocument = z.infer<typeof architectureSnapshotSchema>;

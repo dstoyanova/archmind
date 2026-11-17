@@ -58,6 +58,31 @@ describe("analyzeRepository workspace handling", () => {
     ]);
     expect(snapshot.files.map((file) => file.path)).toEqual(["packages/a/src/index.ts"]);
   });
+
+  it("reports a duplicate workspace package name and resolves it to the first directory", async () => {
+    await writeRepoFile("package.json", JSON.stringify({ workspaces: ["packages/*"] }));
+    await writeRepoFile("packages/a/package.json", JSON.stringify({ name: "@x/dup" }));
+    await writeRepoFile("packages/a/src/index.ts", "export const a = 1;\n");
+    await writeRepoFile("packages/b/package.json", JSON.stringify({ name: "@x/dup" }));
+    await writeRepoFile("packages/b/src/index.ts", "export const b = 1;\n");
+    await writeRepoFile("packages/c/package.json", JSON.stringify({ name: "@x/c" }));
+    await writeRepoFile("packages/c/src/index.ts", "import { a } from '@x/dup';\nexport const c = a;\n");
+
+    const { snapshot } = await analyzeRepository({ repositoryRoot: root });
+
+    expect(snapshot.diagnostics).toEqual([
+      expect.objectContaining({
+        code: "WORKSPACE_PACKAGE_NAME_DUPLICATE",
+        filePath: "packages/a/package.json",
+        message: expect.stringContaining('imports of it resolve to "packages/a"')
+      })
+    ]);
+    const componentById = new Map(snapshot.components.map((component) => [component.id, component]));
+    const importTargets = snapshot.dependencies
+      .filter((dependency) => componentById.get(dependency.fromComponentId)?.paths.includes("packages/c"))
+      .map((dependency) => componentById.get(dependency.toComponentId)?.paths);
+    expect(importTargets).toEqual([["packages/a"]]);
+  });
 });
 
 describe("analyzeRepository configuration", () => {
@@ -114,9 +139,9 @@ describe("analyzeRepository output guard", () => {
       parserVersion: snapshot.parserVersion,
       contentHash: snapshot.contentHash
     }).toEqual({
-      engineVersion: "0.2.0",
+      engineVersion: "0.3.0",
       parserVersion: "5.9.3",
-      contentHash: "1856cbd5cddd8d352717b6d99983911e37802a39d3d655823e8fbdf8d65d332c"
+      contentHash: "d30bf4d740db42ee32024870b1c4db0c9808f08da8cc71372d97789fdc4c28e9"
     });
   });
 });

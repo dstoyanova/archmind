@@ -16,6 +16,15 @@ const internalPackages = [
   "@archmind/observability"
 ];
 
+// `no-restricted-imports` from a later config block replaces an earlier one instead of merging,
+// so every block that sets the rule must repeat these patterns.
+const publicEntryPointPatterns = [
+  {
+    group: ["@archmind/*/src/**", "@archmind/*/internal/**"],
+    message: "Import internal files only through package public entry points."
+  }
+];
+
 function createInternalRestrictionRule(
   allowedPackages,
   messagePrefix = "Package dependency rules violation"
@@ -30,9 +39,47 @@ function createInternalRestrictionRule(
       paths: restrictedPackages.map((pkg) => ({
         name: pkg,
         message: `${messagePrefix}: ${pkg} is not allowed here.`
-      }))
+      })),
+      patterns: publicEntryPointPatterns
     }
   ];
+}
+
+const TS_FILES = "*.{ts,tsx,mts,cts}";
+// Directory depth below a package root that is covered by the relative-import rule below.
+const MAX_PACKAGE_DEPTH = 8;
+
+/**
+ * A relative import must stay inside its own package: cross-package access goes through
+ * `@archmind/*` entry points. A file `depth` directories below the package root escapes the
+ * package when it climbs more than `depth` levels, so one block is generated per depth.
+ * `no-restricted-syntax` is used because, unlike `no-restricted-imports`, it composes with
+ * the per-package import rules instead of being replaced by them.
+ */
+function createRelativePackageEscapeBlocks() {
+  return Array.from({ length: MAX_PACKAGE_DEPTH + 1 }, (_, depth) => {
+    // esquery regex literals cannot contain a slash, so it is written as \x2f.
+    const escapePattern = `^${"(\\.\\.\\x2f)".repeat(depth + 1)}`;
+    const message =
+      "Relative imports must not leave their package; import other packages through their @archmind/* entry point.";
+    return {
+      files: ["apps", "packages"].map((root) => `${root}/*/${"*/".repeat(depth)}${TS_FILES}`),
+      rules: {
+        "no-restricted-syntax": [
+          "error",
+          ...[
+            "ImportDeclaration",
+            "ExportAllDeclaration",
+            "ExportNamedDeclaration",
+            "ImportExpression"
+          ].map((nodeType) => ({
+            selector: `${nodeType}[source.value=/${escapePattern}/]`,
+            message
+          }))
+        ]
+      }
+    };
+  });
 }
 
 const archmindConfig = [
@@ -69,18 +116,7 @@ const archmindConfig = [
           forbid: ["@archmind/*/*"]
         }
       ],
-      "no-restricted-imports": [
-        "error",
-        {
-          patterns: [
-            {
-              group: ["@archmind/*/src/**", "@archmind/*/internal/**"],
-              message:
-                "Import internal files only through package public entry points."
-            }
-          ]
-        }
-      ]
+      "no-restricted-imports": ["error", { patterns: publicEntryPointPatterns }]
     }
   },
   {
@@ -94,19 +130,19 @@ const archmindConfig = [
   {
     files: ["apps/cli/**/*.{ts,tsx,mts,cts}"],
     rules: {
-      "no-restricted-imports": ["off"]
+      "no-restricted-imports": ["error", { patterns: publicEntryPointPatterns }]
     }
   },
   {
     files: ["apps/api/**/*.{ts,tsx,mts,cts}"],
     rules: {
-      "no-restricted-imports": ["off"]
+      "no-restricted-imports": ["error", { patterns: publicEntryPointPatterns }]
     }
   },
   {
     files: ["apps/worker/**/*.{ts,tsx,mts,cts}"],
     rules: {
-      "no-restricted-imports": ["off"]
+      "no-restricted-imports": ["error", { patterns: publicEntryPointPatterns }]
     }
   },
   {
@@ -187,7 +223,22 @@ const archmindConfig = [
         "domain may not depend on internal packages"
       )
     }
-  }
+  },
+  {
+    // Type-aware rules need the project service, so they run only on files a package tsconfig includes.
+    files: ["{apps,packages}/*/src/**/*.{ts,tsx,mts,cts}"],
+    languageOptions: {
+      parserOptions: {
+        projectService: true
+      }
+    },
+    rules: {
+      "@typescript-eslint/no-floating-promises": "error",
+      "@typescript-eslint/no-misused-promises": "error",
+      "@typescript-eslint/await-thenable": "error"
+    }
+  },
+  ...createRelativePackageEscapeBlocks()
 ];
 
 export default archmindConfig;

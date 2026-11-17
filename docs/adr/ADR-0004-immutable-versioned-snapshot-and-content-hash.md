@@ -82,3 +82,10 @@ The original decision required "normalized" content and "deterministic" sorting 
 - **Excluded import targets.** An import that resolves to a file the analysis left out (ignored, generated, oversized or a declaration file) produces an `IMPORT_TARGET_EXCLUDED` warning. It is never dropped silently.
 - **Engine version.** `ENGINE_VERSION` lives in `@archmind/architecture-engine`. A golden-snapshot test in `@archmind/analysis-pipeline` fails when the `contentHash` of a fixed repository changes, so output changes cannot ship without a version bump.
 - **Verification on read.** `verifyContentHash(snapshot)` recomputes the hash so a snapshot read from disk or the database can be checked for tampering or corruption. `validateSnapshotInvariants` checks referential integrity: component IDs, parent and depth consistency, import, symbol and evidence references, and cycle members.
+
+## Addendum (2026-11-17): line endings, line counts and snapshot writes
+
+- **Line endings.** File content hashes are computed after converting CRLF to LF, for analysed files and for resolution-relevant files. A checkout with `core.autocrlf` therefore has the same `sourceHash` as the same commit on another platform. Content hashes of LF-only files are unchanged, and a lone CR is left as is. `sizeBytes` is still the raw size on disk.
+- **Line counts.** `loc` counts logical lines: a trailing line break ends the last line and does not add another, so `a\nb\n` and `a\nb` both have two lines and an empty file has none. This changed `loc` and moved `ENGINE_VERSION` to `0.3.0`.
+- **Atomic snapshot writes.** The CLI writes a snapshot to a temporary file in the target directory and renames it, so a reader or a failed run never leaves a partial snapshot.
+- **Unexpected git failures.** Git metadata is optional: a missing git binary or a non-repository records nothing and does not warn. Other failures, such as a timeout, are returned as `warnings` from `analyzeRepository` and printed by the CLI. They are deliberately not diagnostics in the snapshot, because a diagnostic would make the `contentHash` depend on git behaviour.

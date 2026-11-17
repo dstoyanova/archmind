@@ -183,6 +183,7 @@ Evaluate rules for a path or an existing snapshot. Write an evaluation document 
   - [ ] `--fail-on <severity>` sets the exit code. `--baseline <evaluation.json> --new-only` counts only new findings.
   - [ ] `compareEvaluations` (in `domain`) classifies findings as new, existing or resolved, and flags `rulesChanged`.
   - [ ] Editing only rules reuses the existing snapshot.
+  - [ ] Self-analysis ignores test fixtures. Add an `analysis.exclude` glob list to `archmind.config.json` (applied by the source provider, so it is part of `analysisConfigHash` and `sourceHash`, and an import into an excluded file still gets `IMPORT_TARGET_EXCLUDED`). ArchMind's own config excludes `apps/cli/fixtures/**`. Record the new config field in ADR-0005 or an addendum.
   - [ ] ArchMind's own CI runs `archmind check` and passes.
 
 ### M3.4 Serve findings from the explorer API

@@ -1,4 +1,4 @@
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -33,6 +33,7 @@ describe("analyzeRepository", () => {
         schemaVersion: string;
       };
       expect(snapshot.schemaVersion).toBe("1");
+      expect(await readdir(path.dirname(outputPath))).toEqual(["snapshot.json"]);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

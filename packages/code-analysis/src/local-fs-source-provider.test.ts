@@ -249,10 +249,51 @@ describe("LocalFsSourceProvider", () => {
 
       expect(result.files[0]).toMatchObject({
         content: "export const a = 1;\nexport const b = 2;\n",
-        loc: 3
+        loc: 2
       });
     } finally {
       await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("counts a file without a trailing newline and an empty file consistently", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "archmind-source-"));
+    try {
+      await writeFile(path.join(root, "a.ts"), "export const a = 1;\nexport const b = 2;");
+      await writeFile(path.join(root, "b.ts"), "");
+
+      const result = await new LocalFsSourceProvider().discover({
+        repositoryRoot: root,
+        analysisConfig: analysisConfig()
+      });
+
+      expect(result.files.map((file) => [file.path, file.loc])).toEqual([
+        ["a.ts", 2],
+        ["b.ts", 0]
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("hashes CRLF and LF checkouts of the same content identically", async () => {
+    const lfRoot = await mkdtemp(path.join(os.tmpdir(), "archmind-source-"));
+    const crlfRoot = await mkdtemp(path.join(os.tmpdir(), "archmind-source-"));
+    try {
+      await writeFile(path.join(lfRoot, "a.ts"), "export const a = 1;\nexport const b = 2;\n");
+      await writeFile(path.join(lfRoot, "package.json"), '{\n  "name": "x"\n}\n');
+      await writeFile(path.join(crlfRoot, "a.ts"), "export const a = 1;\r\nexport const b = 2;\r\n");
+      await writeFile(path.join(crlfRoot, "package.json"), '{\r\n  "name": "x"\r\n}\r\n');
+
+      const discover = (root: string) =>
+        new LocalFsSourceProvider().discover({ repositoryRoot: root, analysisConfig: analysisConfig() });
+      const [lf, crlf] = [await discover(lfRoot), await discover(crlfRoot)];
+
+      expect(crlf.sourceHash).toBe(lf.sourceHash);
+      expect(crlf.files[0]).toMatchObject({ contentHash: lf.files[0]?.contentHash, loc: 2 });
+    } finally {
+      await rm(lfRoot, { recursive: true, force: true });
+      await rm(crlfRoot, { recursive: true, force: true });
     }
   });
 });

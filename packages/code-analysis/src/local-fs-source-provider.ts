@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { createHash, type BinaryLike } from "node:crypto";
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
@@ -118,7 +119,7 @@ export class LocalFsSourceProvider implements SourceProvider {
         path: candidate.path,
         role: classifyFileRole(candidate.path, rolePatterns),
         sizeBytes: bytes.length,
-        contentHash: sha256(bytes),
+        contentHash: sha256(normalizeLineEndings(bytes)),
         loc: countLines(content),
         content
       });
@@ -191,7 +192,7 @@ export class LocalFsSourceProvider implements SourceProvider {
       if (isResolutionInputFile(relativePath)) {
         state.resolutionInputs.push({
           path: relativePath,
-          contentHash: sha256(await readFile(absolutePath))
+          contentHash: sha256(normalizeLineEndings(await readFile(absolutePath)))
         });
       }
 
@@ -278,8 +279,34 @@ function isResolutionInputFile(relativePath: string): boolean {
   );
 }
 
+/**
+ * Counts logical lines: a trailing line break ends the last line and does not start another,
+ * so "a\nb\n" has two lines, like `wc -l` and editors report.
+ */
 function countLines(content: string): number {
-  return content.length === 0 ? 0 : content.split(/\r?\n/u).length;
+  if (content.length === 0) {
+    return 0;
+  }
+
+  const lines = content.split(/\r?\n/u);
+  return lines[lines.length - 1] === "" ? lines.length - 1 : lines.length;
+}
+
+/** Turns CRLF into LF so an `autocrlf` checkout hashes like the same commit on another platform. */
+function normalizeLineEndings(bytes: Buffer): Buffer {
+  const CARRIAGE_RETURN = 0x0d;
+  const LINE_FEED = 0x0a;
+  if (!bytes.includes(CARRIAGE_RETURN)) {
+    return bytes;
+  }
+
+  const normalized: number[] = [];
+  bytes.forEach((byte, index) => {
+    if (!(byte === CARRIAGE_RETURN && bytes[index + 1] === LINE_FEED)) {
+      normalized.push(byte);
+    }
+  });
+  return Buffer.from(normalized);
 }
 
 function resolveRolePatterns(

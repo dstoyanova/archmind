@@ -57,7 +57,6 @@ export function buildGraphMetricsAndCycles(
   const components = [...input.components].sort(compareGraphComponentsById);
   const componentById = new Map(components.map((component) => [component.id, component] as const));
   const fileById = new Map(input.files.map((file) => [file.id, file] as const));
-  const fileIdsByPath = new Map(input.files.map((file) => [file.path, file.id] as const));
   const childrenById = buildChildrenById(components);
 
   const dependencyEvidenceByEdge = new Map<string, ComponentEdgeEvidence[]>();
@@ -71,8 +70,7 @@ export function buildGraphMetricsAndCycles(
       continue;
     }
 
-    const toFileId = resolveImportToFileId(fileImport, fileIdsByPath);
-    const toFile = toFileId ? fileById.get(toFileId) : undefined;
+    const toFile = fileImport.toFileId ? fileById.get(fileImport.toFileId) : undefined;
     const toComponentId = toFile?.componentId ?? fileImport.toComponentId;
 
     if (fileImport.externalPackage) {
@@ -335,22 +333,6 @@ function buildChildrenById(components: GraphComponentInput[]): Map<string, strin
   }
 
   return childrenById;
-}
-
-function resolveImportToFileId(
-  fileImport: SnapshotImport,
-  fileIdsByPath: Map<string, string>
-): string | undefined {
-  if (fileImport.toFileId) {
-    return fileImport.toFileId;
-  }
-
-  const resolvedPath = (fileImport as { resolvedFilePath?: string }).resolvedFilePath;
-  if (!resolvedPath) {
-    return undefined;
-  }
-
-  return fileIdsByPath.get(resolvedPath);
 }
 
 function increment(target: Map<string, number>, key: string, value: number): void {

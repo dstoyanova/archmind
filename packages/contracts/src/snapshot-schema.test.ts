@@ -1,6 +1,13 @@
-import { describe, expect, it } from "vitest";
+import type { ArchitectureSnapshot } from "@archmind/domain";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
-import { architectureSnapshotSchema } from "./snapshot-schema.js";
+import { architectureSnapshotSchema, type ArchitectureSnapshotDocument } from "./snapshot-schema.js";
+
+describe("snapshot schema and domain model", () => {
+  it("describe the same snapshot shape", () => {
+    expectTypeOf<ArchitectureSnapshotDocument>().toEqualTypeOf<ArchitectureSnapshot>();
+  });
+});
 
 function createValidSnapshot() {
   return {

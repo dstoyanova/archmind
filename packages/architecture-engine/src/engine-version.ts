@@ -4,4 +4,4 @@
  * golden-snapshot test in `@archmind/analysis-pipeline` fails when output changes
  * without a bump.
  */
-export const ENGINE_VERSION = "0.2.0";
+export const ENGINE_VERSION = "0.3.0";

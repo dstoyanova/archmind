@@ -75,7 +75,8 @@ async function runAnalyze(args: string[], io: CliIo): Promise<number> {
   const summary = await runAnalyzeCommand({
     repositoryPath,
     outputPath,
-    format
+    format,
+    onWarning: (message) => io.stderr(`Warning: ${message}`)
   });
   if (summary) {
     io.stdout(summary);

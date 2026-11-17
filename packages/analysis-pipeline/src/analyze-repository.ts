@@ -30,6 +30,8 @@ export interface AnalyzeRepositoryInput {
 
 export interface AnalyzeRepositoryResult {
   snapshot: ArchitectureSnapshotDocument;
+  /** Non-fatal problems outside the snapshot, such as git metadata that could not be read. */
+  warnings: string[];
 }
 
 /**
@@ -64,12 +66,12 @@ export async function analyzeRepository(
   });
   const workspacePackageComponents: Record<string, string> = {};
   for (const { directory, manifest } of workspace.packages) {
-    if (manifest.name) {
+    if (manifest.name && !Object.hasOwn(workspacePackageComponents, manifest.name)) {
       workspacePackageComponents[manifest.name] = `package:${directory}`;
     }
   }
 
-  const gitMetadata = await readGitSourceMetadata(repositoryRoot);
+  const git = await readGitSourceMetadata(repositoryRoot);
   const snapshot = buildArchitectureSnapshot({
     engineVersion: ENGINE_VERSION,
     parserVersion: PARSER_VERSION,
@@ -77,7 +79,7 @@ export async function analyzeRepository(
     source: {
       kind: "local",
       sourceHash: sourceProviderResult.sourceHash,
-      ...gitMetadata
+      ...git.metadata
     },
     components: ownership.components,
     ownership: ownership.ownership,
@@ -115,7 +117,7 @@ export async function analyzeRepository(
     workspacePackageComponents
   });
 
-  return { snapshot };
+  return { snapshot, warnings: git.warnings };
 }
 
 async function loadArchmindConfig(

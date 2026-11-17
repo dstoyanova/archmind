@@ -101,7 +101,7 @@ export async function resolveFileImports(
   const repositoryRoot = path.resolve(input.repositoryRoot);
   const diagnostics: ModuleResolutionDiagnostic[] = [];
   const repositoryFiles = await discoverRepositoryFiles(repositoryRoot);
-  const parseHost = createRestrictedParseConfigHost(repositoryRoot, repositoryFiles);
+  const parseHost = createRestrictedParseConfigHost(repositoryRoot, repositoryFiles, diagnostics);
   const tsConfigs = parseTsConfigs(repositoryRoot, repositoryFiles, parseHost, diagnostics);
   const tsConfigByDirectory = new Map(
     tsConfigs.map((config) => [config.directory, config] as const)
@@ -118,9 +118,12 @@ export async function resolveFileImports(
     parseHost,
     diagnostics
   );
-  const workspacePackagesByName = new Map(
-    workspacePackages.map((pkg) => [pkg.name, pkg] as const)
-  );
+  const workspacePackagesByName = new Map<string, WorkspacePackage>();
+  for (const workspacePackage of workspacePackages) {
+    if (!workspacePackagesByName.has(workspacePackage.name)) {
+      workspacePackagesByName.set(workspacePackage.name, workspacePackage);
+    }
+  }
 
   const context: ResolutionContext = {
     repositoryRoot,
@@ -136,7 +139,8 @@ export async function resolveFileImports(
     resolutionHost: createRestrictedModuleResolutionHost(
       repositoryRoot,
       repositoryFiles,
-      indexDirectories(repositoryFiles)
+      indexDirectories(repositoryFiles),
+      diagnostics
     )
   };
   const analysedFilePaths = new Set(input.files.map((file) => file.filePath));
@@ -761,7 +765,8 @@ function findNearestTsConfig(filePath: string, context: ResolutionContext): Pars
 
 function createRestrictedParseConfigHost(
   repositoryRoot: string,
-  repositoryFiles: Set<string>
+  repositoryFiles: Set<string>,
+  diagnostics: ModuleResolutionDiagnostic[]
 ): ts.ParseConfigHost {
   return {
     useCaseSensitiveFileNames: true,
@@ -793,20 +798,36 @@ function createRestrictedParseConfigHost(
         repositoryFiles,
         toRepositoryRelativePath(repositoryRoot, fileName)
       ),
-    readFile: (fileName) => {
-      const relativeFilePath = toRepositoryRelativePath(repositoryRoot, fileName);
-      if (!fileExistsWithinRepository(repositoryRoot, repositoryFiles, relativeFilePath)) {
-        return undefined;
-      }
-
-      try {
-        return ts.sys.readFile(path.join(repositoryRoot, relativeFilePath ?? ""));
-      } catch {
-        return undefined;
-      }
-    },
+    readFile: (fileName) =>
+      readRepositoryFile(repositoryRoot, repositoryFiles, fileName, diagnostics),
     trace: () => undefined
   };
+}
+
+function readRepositoryFile(
+  repositoryRoot: string,
+  repositoryFiles: Set<string>,
+  fileName: string,
+  diagnostics: ModuleResolutionDiagnostic[]
+): string | undefined {
+  const relativeFilePath = toRepositoryRelativePath(repositoryRoot, fileName);
+  if (!fileExistsWithinRepository(repositoryRoot, repositoryFiles, relativeFilePath)) {
+    return undefined;
+  }
+
+  // `ts.sys.readFile` returns undefined instead of throwing, for example on a permission error.
+  const content = ts.sys.readFile(path.join(repositoryRoot, relativeFilePath ?? ""));
+  if (content === undefined) {
+    // The message omits OS error text, which varies by host and would change the hashed snapshot.
+    diagnostics.push({
+      severity: "warning",
+      code: "FILE_READ_FAILED",
+      message: `Could not read "${relativeFilePath ?? ""}"; it is ignored for module resolution.`,
+      filePath: relativeFilePath ?? undefined
+    });
+  }
+
+  return content;
 }
 
 /** Child directory names by repo-relative directory ("" is the root), so directory queries need no file scan. */
@@ -834,21 +855,16 @@ function indexDirectories(repositoryFiles: Set<string>): DirectoryIndex {
 function createRestrictedModuleResolutionHost(
   repositoryRoot: string,
   repositoryFiles: Set<string>,
-  directoryIndex: DirectoryIndex
+  directoryIndex: DirectoryIndex,
+  diagnostics: ModuleResolutionDiagnostic[]
 ): ts.ModuleResolutionHost {
   return {
     fileExists(fileName) {
       const relativePath = toRepositoryRelativePath(repositoryRoot, fileName);
       return fileExistsWithinRepository(repositoryRoot, repositoryFiles, relativePath);
     },
-    readFile(fileName) {
-      const relativePath = toRepositoryRelativePath(repositoryRoot, fileName);
-      if (!fileExistsWithinRepository(repositoryRoot, repositoryFiles, relativePath)) {
-        return undefined;
-      }
-
-      return ts.sys.readFile(path.join(repositoryRoot, relativePath ?? ""));
-    },
+    readFile: (fileName) =>
+      readRepositoryFile(repositoryRoot, repositoryFiles, fileName, diagnostics),
     directoryExists(directoryName) {
       const relativeDirectory = toRepositoryRelativePath(repositoryRoot, directoryName);
       return relativeDirectory !== null && directoryIndex.has(relativeDirectory);

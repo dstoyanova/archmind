@@ -85,7 +85,32 @@ export async function discoverWorkspace(
     .map(([directory, manifest]) => ({ directory, manifest }))
     .sort((left, right) => compareStrings(left.directory, right.directory));
 
+  diagnostics.push(...findDuplicatePackageNames(packages));
+
   return { packages, diagnostics };
+}
+
+/**
+ * Consumers key packages by name, so when several directories declare the same name
+ * the first directory in path order is the one imports resolve to.
+ */
+function findDuplicatePackageNames(packages: WorkspacePackageInfo[]): WorkspaceDiagnostic[] {
+  const directoriesByName = new Map<string, string[]>();
+  for (const { directory, manifest } of packages) {
+    if (manifest.name) {
+      directoriesByName.set(manifest.name, [...(directoriesByName.get(manifest.name) ?? []), directory]);
+    }
+  }
+
+  return [...directoriesByName.entries()]
+    .filter(([, directories]) => directories.length > 1)
+    .sort(([left], [right]) => compareStrings(left, right))
+    .map(([name, directories]) => ({
+      severity: "warning",
+      code: "WORKSPACE_PACKAGE_NAME_DUPLICATE",
+      message: `Workspace package name "${name}" is declared in ${directories.map((directory) => `"${directory}"`).join(", ")}; imports of it resolve to "${directories[0] ?? ""}".`,
+      filePath: `${directories[0] === "." ? "" : `${directories[0]}/`}package.json`
+    }));
 }
 
 function collectWorkspacePatterns(

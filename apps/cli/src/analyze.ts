@@ -1,5 +1,6 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import process from "node:process";
 
 import {
   analyzeRepository,
@@ -18,6 +19,8 @@ export interface AnalyzeCommandInput {
   repositoryPath: string;
   outputPath: string;
   format: AnalyzeOutputFormat;
+  /** Receives non-fatal problems that are not part of the snapshot. */
+  onWarning?: ((message: string) => void) | undefined;
 }
 
 export async function runAnalyzeCommand(input: AnalyzeCommandInput): Promise<string | null> {
@@ -26,9 +29,12 @@ export async function runAnalyzeCommand(input: AnalyzeCommandInput): Promise<str
   const result = await analyzeRepository({
     repositoryRoot
   });
+  for (const warning of result.warnings) {
+    input.onWarning?.(warning);
+  }
 
   await ensureDirectoryForFile(outputPath);
-  await writeFile(outputPath, JSON.stringify(result.snapshot, null, 2) + "\n", "utf8");
+  await writeFileAtomically(outputPath, JSON.stringify(result.snapshot, null, 2) + "\n");
 
   if (input.format === "summary") {
     return formatSnapshotSummary(result.snapshot);
@@ -64,4 +70,16 @@ export function formatSnapshotSummary(snapshot: ArchitectureSnapshotDocument): s
 export async function ensureDirectoryForFile(filePath: string): Promise<void> {
   const targetDirectory = path.dirname(filePath);
   await mkdir(targetDirectory, { recursive: true });
+}
+
+/** Readers never see a partially written snapshot: the content lands via a same-directory rename. */
+async function writeFileAtomically(filePath: string, content: string): Promise<void> {
+  const temporaryPath = `${filePath}.${process.pid}.tmp`;
+  try {
+    await writeFile(temporaryPath, content, "utf8");
+    await rename(temporaryPath, filePath);
+  } catch (error) {
+    await rm(temporaryPath, { force: true });
+    throw error;
+  }
 }
