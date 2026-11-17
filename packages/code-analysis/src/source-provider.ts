@@ -29,6 +29,10 @@ export interface DiscoveredSourceFile {
   role: FileRole;
   sizeBytes: number;
   contentHash: string;
+  /** Line count of `content`, recorded as the file's `loc`. */
+  loc: number;
+  /** Decoded text read once during discovery; hashing, `loc` and parsing all use it. */
+  content: string;
 }
 
 export interface SourceProviderDiagnostic {

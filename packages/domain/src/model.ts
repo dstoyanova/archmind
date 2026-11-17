@@ -23,6 +23,7 @@ export const IMPORT_RESOLUTIONS = [
   "workspace-package",
   "external-package",
   "node-built-in",
+  "asset",
   "unresolved"
 ] as const;
 
@@ -47,10 +48,15 @@ export const SYMBOL_KINDS = [
   "interface",
   "type",
   "enum",
-  "variable"
+  "variable",
+  "re-export"
 ] as const;
 
 export type SymbolKind = (typeof SYMBOL_KINDS)[number];
+
+export const PARSE_STATUSES = ["parsed", "parse-error", "read-error"] as const;
+
+export type ParseStatus = (typeof PARSE_STATUSES)[number];
 
 export const DIAGNOSTIC_SEVERITIES = ["error", "warning"] as const;
 
@@ -85,7 +91,7 @@ export interface ArchitectureFile {
   role: FileRole;
   language: string;
   loc: number;
-  parseStatus: string;
+  parseStatus: ParseStatus;
 }
 
 export interface ArchitectureSymbol {

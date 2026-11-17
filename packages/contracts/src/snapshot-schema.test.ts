@@ -73,4 +73,21 @@ describe("architectureSnapshotSchema", () => {
     const result = architectureSnapshotSchema.safeParse(invalidSnapshot);
     expect(result.success).toBe(false);
   });
+
+  it.each([
+    ["an unknown parseStatus", (snapshot: ReturnType<typeof createValidSnapshot>) => ({
+      ...snapshot,
+      files: [{ ...snapshot.files[0], parseStatus: "weird" }]
+    })],
+    ["an unresolvedRate above 1", (snapshot: ReturnType<typeof createValidSnapshot>) => ({
+      ...snapshot,
+      resolutionStats: { countsByResolution: {}, unresolvedRate: 1.5 }
+    })],
+    ["a createdAt that is not a datetime", (snapshot: ReturnType<typeof createValidSnapshot>) => ({
+      ...snapshot,
+      createdAt: "yesterday"
+    })]
+  ])("rejects %s", (_name, mutate) => {
+    expect(architectureSnapshotSchema.safeParse(mutate(createValidSnapshot())).success).toBe(false);
+  });
 });

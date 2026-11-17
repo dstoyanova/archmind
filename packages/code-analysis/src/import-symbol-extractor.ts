@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { compareStrings } from "@archmind/domain";
+import { compareStrings, type SymbolKind } from "@archmind/domain";
 import ts from "typescript";
 
 import type { DiscoveredSourceFile } from "./source-provider.js";
@@ -20,7 +20,7 @@ export interface ExtractedFileImport {
 export interface ExtractedSymbol {
   filePath: string;
   name: string;
-  kind: "function" | "class" | "interface" | "type" | "enum" | "variable";
+  kind: SymbolKind;
   line: number;
   column: number;
 }
@@ -35,7 +35,8 @@ export interface SourceParseDiagnostic {
 
 export interface ExtractImportsAndSymbolsInput {
   repositoryRoot: string;
-  files: Pick<DiscoveredSourceFile, "path">[];
+  /** When `content` is omitted the file is read from `repositoryRoot`. */
+  files: Array<Pick<DiscoveredSourceFile, "path"> & Partial<Pick<DiscoveredSourceFile, "content">>>;
 }
 
 export interface ExtractImportsAndSymbolsResult {
@@ -52,11 +53,11 @@ export async function extractImportsAndSymbols(
   const diagnostics: SourceParseDiagnostic[] = [];
 
   for (const file of input.files) {
-    const absoluteFilePath = path.join(input.repositoryRoot, file.path);
     let sourceText: string;
 
     try {
-      sourceText = await readFile(absoluteFilePath, "utf8");
+      sourceText =
+        file.content ?? (await readFile(path.join(input.repositoryRoot, file.path), "utf8"));
     } catch (error) {
       const errorCode = (error as { code?: unknown }).code;
       diagnostics.push({
@@ -78,8 +79,7 @@ export async function extractImportsAndSymbols(
       true
     );
 
-    const parseDiagnostics = getParseDiagnostics(sourceFile);
-    for (const parseDiagnostic of parseDiagnostics) {
+    for (const parseDiagnostic of getSyntacticDiagnostics(sourceFile)) {
       const start = parseDiagnostic.start ?? 0;
       const lineAndCharacter = sourceFile.getLineAndCharacterOfPosition(start);
       diagnostics.push({
@@ -123,13 +123,37 @@ function collectImports(
       }
     }
 
+    if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
+      const moduleSpecifier = getLiteralModuleSpecifier(node.moduleReference.expression);
+      if (moduleSpecifier) {
+        target.push({
+          filePath,
+          specifier: moduleSpecifier,
+          kind: node.isTypeOnly ? "type-only" : "require",
+          ...getLineAndColumn(sourceFile, node)
+        });
+      }
+    }
+
+    if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) {
+      const moduleSpecifier = getLiteralModuleSpecifier(node.argument.literal);
+      if (moduleSpecifier) {
+        target.push({
+          filePath,
+          specifier: moduleSpecifier,
+          kind: "type-only",
+          ...getLineAndColumn(sourceFile, node)
+        });
+      }
+    }
+
     if (ts.isExportDeclaration(node) && node.moduleSpecifier) {
       const moduleSpecifier = getLiteralModuleSpecifier(node.moduleSpecifier);
       if (moduleSpecifier) {
         target.push({
           filePath,
           specifier: moduleSpecifier,
-          kind: node.isTypeOnly ? "type-only" : "re-export",
+          kind: classifyExportDeclaration(node),
           ...getLineAndColumn(sourceFile, node)
         });
       }
@@ -200,12 +224,52 @@ function classifyImportDeclaration(
   return "static";
 }
 
+function classifyExportDeclaration(
+  declaration: ts.ExportDeclaration
+): ExtractedFileImport["kind"] {
+  if (declaration.isTypeOnly) {
+    return "type-only";
+  }
+
+  const exportClause = declaration.exportClause;
+  if (
+    exportClause &&
+    ts.isNamedExports(exportClause) &&
+    exportClause.elements.length > 0 &&
+    exportClause.elements.every((element) => element.isTypeOnly)
+  ) {
+    return "type-only";
+  }
+
+  return "re-export";
+}
+
 function collectExportedSymbols(
   filePath: string,
   sourceFile: ts.SourceFile,
   target: ExtractedSymbol[]
 ): void {
+  const localKinds = collectLocalDeclarationKinds(sourceFile);
+
   for (const statement of sourceFile.statements) {
+    if (ts.isExportDeclaration(statement)) {
+      collectExportDeclarationSymbols(filePath, sourceFile, statement, localKinds, target);
+      continue;
+    }
+
+    if (ts.isExportAssignment(statement) && !statement.isExportEquals) {
+      target.push({
+        filePath,
+        name: "default",
+        kind:
+          (ts.isIdentifier(statement.expression)
+            ? localKinds.get(statement.expression.text)
+            : undefined) ?? "variable",
+        ...getLineAndColumn(sourceFile, statement)
+      });
+      continue;
+    }
+
     if (!hasExportModifier(statement)) {
       continue;
     }
@@ -276,6 +340,69 @@ function collectExportedSymbols(
   }
 }
 
+/**
+ * Names exported through `export { a, b as c }` and `export * as ns from`. A name
+ * declared in the same file keeps that declaration's kind; anything else, such as a
+ * re-export from another module, is a `re-export`. `export * from` adds no names
+ * because they cannot be known without resolving the target module.
+ */
+function collectExportDeclarationSymbols(
+  filePath: string,
+  sourceFile: ts.SourceFile,
+  declaration: ts.ExportDeclaration,
+  localKinds: ReadonlyMap<string, SymbolKind>,
+  target: ExtractedSymbol[]
+): void {
+  const exportClause = declaration.exportClause;
+  if (!exportClause) {
+    return;
+  }
+
+  if (ts.isNamespaceExport(exportClause)) {
+    target.push({
+      filePath,
+      name: exportClause.name.text,
+      kind: "re-export",
+      ...getLineAndColumn(sourceFile, exportClause)
+    });
+    return;
+  }
+
+  for (const element of exportClause.elements) {
+    const localName = (element.propertyName ?? element.name).text;
+    target.push({
+      filePath,
+      name: element.name.text,
+      kind: (!declaration.moduleSpecifier && localKinds.get(localName)) || "re-export",
+      ...getLineAndColumn(sourceFile, element)
+    });
+  }
+}
+
+function collectLocalDeclarationKinds(sourceFile: ts.SourceFile): Map<string, SymbolKind> {
+  const kinds = new Map<string, SymbolKind>();
+
+  for (const statement of sourceFile.statements) {
+    if (ts.isFunctionDeclaration(statement) && statement.name) {
+      kinds.set(statement.name.text, "function");
+    } else if (ts.isClassDeclaration(statement) && statement.name) {
+      kinds.set(statement.name.text, "class");
+    } else if (ts.isInterfaceDeclaration(statement)) {
+      kinds.set(statement.name.text, "interface");
+    } else if (ts.isTypeAliasDeclaration(statement)) {
+      kinds.set(statement.name.text, "type");
+    } else if (ts.isEnumDeclaration(statement)) {
+      kinds.set(statement.name.text, "enum");
+    } else if (ts.isVariableStatement(statement)) {
+      for (const name of extractBindingNames(statement.declarationList.declarations)) {
+        kinds.set(name, "variable");
+      }
+    }
+  }
+
+  return kinds;
+}
+
 function extractBindingNames(
   declarations: readonly ts.VariableDeclaration[]
 ): string[] {
@@ -344,14 +471,33 @@ function getLineAndColumn(
   };
 }
 
-function getParseDiagnostics(
-  sourceFile: ts.SourceFile
-): readonly ts.DiagnosticWithLocation[] {
-  const sourceWithParseDiagnostics = sourceFile as ts.SourceFile & {
-    parseDiagnostics?: readonly ts.DiagnosticWithLocation[];
+/**
+ * Syntax errors via the public `Program#getSyntacticDiagnostics` API, over the
+ * already parsed source file so nothing is parsed twice. Codes 8000-8999 are
+ * TypeScript's "only valid in .ts files" checks for JavaScript files; they flag
+ * valid-but-unsupported JS dialects (for example Flow) rather than parse errors.
+ */
+function getSyntacticDiagnostics(sourceFile: ts.SourceFile): readonly ts.Diagnostic[] {
+  const host: ts.CompilerHost = {
+    getSourceFile: () => sourceFile,
+    getDefaultLibFileName: () => "lib.d.ts",
+    writeFile: () => undefined,
+    getCurrentDirectory: () => "",
+    getCanonicalFileName: (fileName) => fileName,
+    useCaseSensitiveFileNames: () => true,
+    getNewLine: () => "\n",
+    fileExists: () => false,
+    readFile: () => undefined
   };
+  const program = ts.createProgram({
+    rootNames: [sourceFile.fileName],
+    options: { noLib: true, noResolve: true, allowJs: true, types: [] },
+    host
+  });
 
-  return sourceWithParseDiagnostics.parseDiagnostics ?? [];
+  return program
+    .getSyntacticDiagnostics(sourceFile)
+    .filter((diagnostic) => diagnostic.code < 8000 || diagnostic.code >= 9000);
 }
 
 function compareByLocationThenSpecifier(

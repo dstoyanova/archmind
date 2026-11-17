@@ -112,7 +112,13 @@ describe("resolveFileImports", () => {
 
       const result = await resolveFileImports({
         repositoryRoot: root,
-        files: [{ filePath: "apps/web/src/main.ts" }],
+        files: [
+          "apps/web/src/main.ts",
+          "apps/web/src/local.ts",
+          "packages/lib/src/index.ts",
+          "packages/lib/src/internal/feature.ts",
+          "packages/lib/src/path-only.ts"
+        ].map((filePath) => ({ filePath })),
         imports: [
           {
             filePath: "apps/web/src/main.ts",
@@ -379,5 +385,89 @@ describe("resolveFileImports", () => {
     } finally {
       await rm(parent, { recursive: true, force: true });
     }
+  });
+
+  describe("import classification", () => {
+    async function resolveIn(
+      files: Record<string, string>,
+      analysedPaths: string[],
+      imports: Array<{ specifier: string; line?: number; from?: string }>
+    ) {
+      const root = await mkdtemp(path.join(os.tmpdir(), "archmind-resolve-"));
+      try {
+        for (const [relativePath, content] of Object.entries(files)) {
+          await mkdir(path.dirname(path.join(root, relativePath)), { recursive: true });
+          await writeFile(path.join(root, relativePath), content);
+        }
+
+        return await resolveFileImports({
+          repositoryRoot: root,
+          files: analysedPaths.map((filePath) => ({ filePath })),
+          imports: imports.map((item, index) => ({
+            filePath: item.from ?? "src/main.ts",
+            specifier: item.specifier,
+            kind: "static" as const,
+            line: item.line ?? index + 1,
+            column: 1
+          }))
+        });
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }
+
+    it("reports an import into a file that exists but is excluded from analysis", async () => {
+      const result = await resolveIn(
+        { "src/main.ts": "export {};\n", "src/ignored.ts": "export const x = 1;\n" },
+        ["src/main.ts"],
+        [{ specifier: "./ignored.js" }]
+      );
+
+      expect(result.diagnostics).toEqual([
+        expect.objectContaining({
+          code: "IMPORT_TARGET_EXCLUDED",
+          filePath: "src/main.ts",
+          line: 1
+        })
+      ]);
+    });
+
+    it("classifies asset imports separately and keeps them out of the unresolved rate", async () => {
+      const result = await resolveIn(
+        { "src/main.ts": "export {};\n", "src/a.json": "{}", "src/styles.css": "" },
+        ["src/main.ts"],
+        [{ specifier: "./styles.css" }, { specifier: "./a.json?raw" }]
+      );
+
+      expect(result.imports.map((item) => item.resolution)).toEqual(["asset", "asset"]);
+      expect(result.resolutionStats.unresolvedRate).toBe(0);
+      expect(result.diagnostics).toEqual([]);
+    });
+
+    it("resolves # imports whose target leaves the package directory", async () => {
+      const result = await resolveIn(
+        {
+          "package.json": "{}",
+          "pkg/package.json": JSON.stringify({ imports: { "#shared": "../shared/index.ts" } }),
+          "pkg/src/main.ts": "export {};\n",
+          "shared/index.ts": "export {};\n"
+        },
+        ["pkg/src/main.ts", "shared/index.ts"],
+        [{ specifier: "#shared", from: "pkg/src/main.ts" }]
+      );
+
+      expect(result.imports[0]).toMatchObject({ resolution: "internal-file" });
+    });
+
+    it("counts an unresolvable # import in the unresolved rate", async () => {
+      const result = await resolveIn(
+        { "src/main.ts": "export {};\n", "src/local.ts": "export {};\n" },
+        ["src/main.ts", "src/local.ts"],
+        [{ specifier: "./local.js" }, { specifier: "#nope" }]
+      );
+
+      expect(result.imports.map((item) => item.resolution)).toEqual(["internal-file", "unresolved"]);
+      expect(result.resolutionStats.unresolvedRate).toBe(0.5);
+    });
   });
 });

@@ -1,10 +1,9 @@
 import { createHash } from "node:crypto";
-import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 
 import {
+  ENGINE_VERSION,
   buildArchitectureSnapshot,
   mapFilesToComponentHierarchy,
   type SnapshotBuilderFileInput
@@ -23,9 +22,7 @@ import {
 } from "@archmind/contracts";
 import { canonicalJson } from "@archmind/domain";
 
-const execFileAsync = promisify(execFile);
-
-const ENGINE_VERSION = "0.1.0";
+import { readGitSourceMetadata } from "./git-source-metadata.js";
 
 export interface AnalyzeRepositoryInput {
   repositoryRoot: string;
@@ -72,11 +69,6 @@ export async function analyzeRepository(
     }
   }
 
-  const fileLocByPath = await loadFileLocMap(
-    repositoryRoot,
-    sourceProviderResult.files.map((file) => file.path)
-  );
-
   const gitMetadata = await readGitSourceMetadata(repositoryRoot);
   const snapshot = buildArchitectureSnapshot({
     engineVersion: ENGINE_VERSION,
@@ -92,7 +84,7 @@ export async function analyzeRepository(
     files: sourceProviderResult.files.map<SnapshotBuilderFileInput>((file) => ({
       path: file.path,
       role: file.role,
-      loc: fileLocByPath.get(file.path) ?? 0
+      loc: file.loc
     })),
     fileImports: resolved.imports.map((fileImport) => ({
       filePath: fileImport.filePath,
@@ -114,6 +106,7 @@ export async function analyzeRepository(
     })),
     resolutionStats: resolved.resolutionStats,
     diagnostics: [
+      ...ownership.diagnostics,
       ...sourceProviderResult.diagnostics,
       ...workspace.diagnostics,
       ...extracted.diagnostics,
@@ -147,64 +140,15 @@ async function loadArchmindConfig(
     throw new Error(`Invalid JSON in "archmind.config.json": ${toErrorMessage(error)}`);
   }
 
-  return { analysisConfig: archmindConfigSchema.parse(configJson).analysis };
-}
-
-async function loadFileLocMap(
-  repositoryRoot: string,
-  filePaths: string[]
-): Promise<Map<string, number>> {
-  const result = new Map<string, number>();
-  for (const filePath of filePaths) {
-    const content = await readFile(path.join(repositoryRoot, filePath), "utf8");
-    result.set(filePath, countLoc(content));
+  const parsed = archmindConfigSchema.safeParse(configJson);
+  if (!parsed.success) {
+    const issues = parsed.error.issues.map(
+      (issue) => `- ${issue.path.length > 0 ? issue.path.join(".") : "(root)"}: ${issue.message}`
+    );
+    throw new Error(`Invalid "archmind.config.json":\n${issues.join("\n")}`);
   }
 
-  return result;
-}
-
-function countLoc(content: string): number {
-  return content.length === 0 ? 0 : content.split(/\r?\n/u).length;
-}
-
-async function readGitSourceMetadata(repositoryRoot: string): Promise<{
-  commitSha?: string | undefined;
-  branch?: string | undefined;
-  commitTimestamp?: string | undefined;
-  workingTreeDirty?: boolean | undefined;
-}> {
-  const [commitSha, branch, commitTimestamp, status] = await Promise.all([
-    runGitCommand(repositoryRoot, ["rev-parse", "HEAD"]),
-    runGitCommand(repositoryRoot, ["rev-parse", "--abbrev-ref", "HEAD"]),
-    runGitCommand(repositoryRoot, ["show", "-s", "--format=%cI", "HEAD"]),
-    runGitCommand(repositoryRoot, ["status", "--porcelain"])
-  ]);
-
-  if (!commitSha || !branch || !commitTimestamp) {
-    return {};
-  }
-
-  return {
-    commitSha,
-    branch,
-    commitTimestamp,
-    workingTreeDirty: status !== ""
-  };
-}
-
-async function runGitCommand(
-  repositoryRoot: string,
-  args: string[]
-): Promise<string | undefined> {
-  try {
-    const result = await execFileAsync("git", ["--no-pager", ...args], {
-      cwd: repositoryRoot,
-      timeout: 2000
-    });
-    return result.stdout.trim();
-  } catch {
-    return undefined;
-  }
+  return { analysisConfig: parsed.data.analysis };
 }
 
 function sha256Hex(value: string): string {

@@ -5,8 +5,9 @@ import {
   architectureSnapshotSchema,
   type ArchitectureSnapshotDocument
 } from "@archmind/contracts";
-import { canonicalJson, compareStrings } from "@archmind/domain";
+import { compareStrings } from "@archmind/domain";
 
+import { computeContentHash } from "./content-hash.js";
 import {
   buildGraphMetricsAndCycles,
   type GraphComponentInput
@@ -35,7 +36,7 @@ export interface SnapshotBuilderFileInput {
   role: ArchitectureSnapshotDocument["files"][number]["role"];
   language?: string | undefined;
   loc?: number | undefined;
-  parseStatus?: string | undefined;
+  parseStatus?: ArchitectureSnapshotDocument["files"][number]["parseStatus"] | undefined;
 }
 
 export interface SnapshotBuilderImportInput {
@@ -461,25 +462,6 @@ function compareImportInput(
   }
 
   return compareStrings(left.kind, right.kind);
-}
-
-function computeContentHash(snapshot: ArchitectureSnapshotDocument): string {
-  const payload = {
-    engineVersion: snapshot.engineVersion,
-    parserVersion: snapshot.parserVersion,
-    analysisConfigHash: snapshot.analysisConfigHash,
-    components: snapshot.components,
-    files: snapshot.files,
-    symbols: snapshot.symbols,
-    fileImports: snapshot.fileImports,
-    dependencies: snapshot.dependencies,
-    externalDependencies: snapshot.externalDependencies,
-    cycles: snapshot.cycles,
-    diagnostics: snapshot.diagnostics,
-    resolutionStats: snapshot.resolutionStats
-  };
-
-  return sha256Hex(canonicalJson(payload));
 }
 
 function deterministicId(prefix: string, key: string): string {

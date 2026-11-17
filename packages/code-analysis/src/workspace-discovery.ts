@@ -9,6 +9,7 @@ import { discoverRepositoryFiles } from "./repository-files.js";
 export interface PackageManifest {
   name?: string | undefined;
   exports?: unknown;
+  imports?: unknown;
   main?: string | undefined;
   module?: string | undefined;
   types?: string | undefined;

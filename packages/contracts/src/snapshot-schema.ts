@@ -4,6 +4,7 @@ import {
   FILE_ROLES,
   IMPORT_KINDS,
   IMPORT_RESOLUTIONS,
+  PARSE_STATUSES,
   SOURCE_KINDS,
   SYMBOL_KINDS,
   validateSnapshotInvariants
@@ -47,7 +48,7 @@ const architectureFileSchema = z.object({
   role: fileRoleSchema,
   language: z.string().min(1),
   loc: nonNegativeInt,
-  parseStatus: z.string().min(1)
+  parseStatus: z.enum(PARSE_STATUSES)
 });
 
 const architectureSymbolSchema = z.object({
@@ -107,7 +108,7 @@ const cycleSchema = z.object({
 
 const resolutionStatsSchema = z.object({
   countsByResolution: countsByResolutionSchema,
-  unresolvedRate: nonNegativeNumber
+  unresolvedRate: z.number().min(0).max(1)
 });
 
 const diagnosticSchema = z.object({
@@ -135,7 +136,7 @@ export const architectureSnapshotSchema = z
     analysisConfigHash: z.string().min(1),
     contentHash: z.string().min(1),
     source: snapshotSourceSchema,
-    createdAt: z.string().min(1),
+    createdAt: z.string().datetime({ offset: true }),
     components: z.array(architectureComponentSchema),
     files: z.array(architectureFileSchema),
     symbols: z.array(architectureSymbolSchema),

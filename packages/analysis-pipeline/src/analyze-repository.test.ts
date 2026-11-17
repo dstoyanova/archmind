@@ -59,3 +59,64 @@ describe("analyzeRepository workspace handling", () => {
     expect(snapshot.files.map((file) => file.path)).toEqual(["packages/a/src/index.ts"]);
   });
 });
+
+describe("analyzeRepository configuration", () => {
+  it("reports invalid configuration readably instead of throwing a raw ZodError", async () => {
+    await writeRepoFile("archmind.config.json", JSON.stringify({ analysis: { components: "nope" } }));
+
+    await expect(analyzeRepository({ repositoryRoot: root })).rejects.toThrow(
+      /Invalid "archmind\.config\.json":\n- analysis\.components: /u
+    );
+  });
+
+  it("rejects misspelled analysis keys", async () => {
+    await writeRepoFile("archmind.config.json", JSON.stringify({ analysis: { componentRoot: {} } }));
+
+    await expect(analyzeRepository({ repositoryRoot: root })).rejects.toThrow(/componentRoot/u);
+  });
+
+  it("reports an unknown configured parent as a diagnostic", async () => {
+    await writeRepoFile(
+      "archmind.config.json",
+      JSON.stringify({ analysis: { components: [{ name: "x", paths: ["src/**"], parent: "nope" }] } })
+    );
+    await writeRepoFile("src/index.ts", "export const a = 1;\n");
+
+    const { snapshot } = await analyzeRepository({ repositoryRoot: root });
+
+    expect(snapshot.diagnostics).toEqual([
+      expect.objectContaining({ code: "CONFIG_COMPONENT_PARENT_UNKNOWN" })
+    ]);
+  });
+});
+
+describe("analyzeRepository output guard", () => {
+  // When this fails, analysis output changed. Bump ENGINE_VERSION in
+  // @archmind/architecture-engine, then update the golden values.
+  it("changes contentHash only together with the engine or parser version", async () => {
+    await writeRepoFile("package.json", JSON.stringify({ name: "guard-root", workspaces: ["packages/*"] }));
+    await writeRepoFile("packages/a/package.json", JSON.stringify({ name: "@guard/a" }));
+    await writeRepoFile(
+      "packages/a/src/index.ts",
+      "import { b } from '@guard/b';\nimport fs from 'node:fs';\nimport './styles.css';\nexport { b };\nexport const a = 1;\n"
+    );
+    await writeRepoFile("packages/b/package.json", JSON.stringify({ name: "@guard/b" }));
+    await writeRepoFile(
+      "packages/b/src/index.ts",
+      "import type { a } from '@guard/a';\nexport const b: typeof a = 2;\n"
+    );
+
+    const { snapshot } = await analyzeRepository({ repositoryRoot: root });
+
+    expect(snapshot.diagnostics).toEqual([]);
+    expect({
+      engineVersion: snapshot.engineVersion,
+      parserVersion: snapshot.parserVersion,
+      contentHash: snapshot.contentHash
+    }).toEqual({
+      engineVersion: "0.2.0",
+      parserVersion: "5.9.3",
+      contentHash: "1856cbd5cddd8d352717b6d99983911e37802a39d3d655823e8fbdf8d65d332c"
+    });
+  });
+});

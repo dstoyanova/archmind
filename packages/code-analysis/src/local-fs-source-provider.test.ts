@@ -161,4 +161,98 @@ describe("LocalFsSourceProvider", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it("applies nested .gitignore files only to their own subtree", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "archmind-source-"));
+    try {
+      await mkdir(path.join(root, "pkg"), { recursive: true });
+      await mkdir(path.join(root, "other"), { recursive: true });
+      await writeFile(path.join(root, "pkg/.gitignore"), "secret.ts\n");
+      await writeFile(path.join(root, "pkg/secret.ts"), "export const secret = 1;\n");
+      await writeFile(path.join(root, "pkg/public.ts"), "export const open = 1;\n");
+      await writeFile(path.join(root, "other/secret.ts"), "export const kept = 1;\n");
+
+      const result = await new LocalFsSourceProvider().discover({
+        repositoryRoot: root,
+        analysisConfig: analysisConfig()
+      });
+
+      expect(result.files.map((file) => file.path)).toEqual(["other/secret.ts", "pkg/public.ts"]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("excludes build output at package roots but keeps nested source folders with the same names", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "archmind-source-"));
+    try {
+      await mkdir(path.join(root, "dist"), { recursive: true });
+      await mkdir(path.join(root, "packages/a/dist"), { recursive: true });
+      await mkdir(path.join(root, "packages/a/src/build"), { recursive: true });
+      await mkdir(path.join(root, "packages/a/src/out"), { recursive: true });
+      await mkdir(path.join(root, ".git/hooks"), { recursive: true });
+      await writeFile(path.join(root, "package.json"), "{}");
+      await writeFile(path.join(root, "packages/a/package.json"), "{}");
+      await writeFile(path.join(root, "dist/root.ts"), "export const r = 1;\n");
+      await writeFile(path.join(root, "packages/a/dist/built.ts"), "export const b = 1;\n");
+      await writeFile(path.join(root, "packages/a/src/build/real.ts"), "export const x = 1;\n");
+      await writeFile(path.join(root, "packages/a/src/out/real2.ts"), "export const y = 1;\n");
+      await writeFile(path.join(root, ".git/hooks/hook.js"), "module.exports = 1;\n");
+
+      const result = await new LocalFsSourceProvider().discover({
+        repositoryRoot: root,
+        analysisConfig: analysisConfig()
+      });
+
+      expect(result.files.map((file) => file.path)).toEqual([
+        "packages/a/src/build/real.ts",
+        "packages/a/src/out/real2.ts"
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("changes the source hash when resolution-relevant config files change", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "archmind-source-"));
+    try {
+      await mkdir(path.join(root, "src"), { recursive: true });
+      await writeFile(path.join(root, "src/a.ts"), "export const a = 1;\n");
+      await writeFile(path.join(root, "tsconfig.json"), '{"compilerOptions":{"paths":{"@/*":["src/*"]}}}');
+      const provider = new LocalFsSourceProvider();
+      const discover = () => provider.discover({ repositoryRoot: root, analysisConfig: analysisConfig() });
+
+      const before = await discover();
+      expect((await discover()).sourceHash).toBe(before.sourceHash);
+
+      await writeFile(path.join(root, "tsconfig.json"), '{"compilerOptions":{"paths":{"~/*":["src/*"]}}}');
+      expect((await discover()).sourceHash).not.toBe(before.sourceHash);
+
+      await writeFile(path.join(root, "package.json"), '{"name":"x"}');
+      const withManifest = await discover();
+      await writeFile(path.join(root, "package.json"), '{"name":"y"}');
+      expect((await discover()).sourceHash).not.toBe(withManifest.sourceHash);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("returns the content and line count read during discovery", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "archmind-source-"));
+    try {
+      await writeFile(path.join(root, "a.ts"), "export const a = 1;\nexport const b = 2;\n");
+
+      const result = await new LocalFsSourceProvider().discover({
+        repositoryRoot: root,
+        analysisConfig: analysisConfig()
+      });
+
+      expect(result.files[0]).toMatchObject({
+        content: "export const a = 1;\nexport const b = 2;\n",
+        loc: 3
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });

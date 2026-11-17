@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { architectureSnapshotSchema } from "@archmind/contracts";
 
+import { verifyContentHash } from "./content-hash.js";
 import { buildArchitectureSnapshot } from "./snapshot-builder.js";
 
 describe("buildArchitectureSnapshot", () => {
@@ -201,5 +202,26 @@ describe("buildArchitectureSnapshot", () => {
     ).toBe(true);
 
     expect(architectureSnapshotSchema.parse(first).contentHash).toBe(first.contentHash);
+  });
+
+  it("verifies the content hash and detects tampering", () => {
+    const snapshot = buildArchitectureSnapshot({
+      engineVersion: "0.1.0",
+      parserVersion: "5.9.3",
+      analysisConfigHash: "cfg-1",
+      source: { kind: "local", sourceHash: "source-a" },
+      components: [{ id: "root", name: "<root>", depth: 0, kind: "root", paths: ["."] }],
+      ownership: [{ filePath: "a.ts", componentId: "root" }],
+      files: [{ path: "a.ts", role: "source", loc: 1 }],
+      fileImports: [],
+      symbols: [],
+      resolutionStats: { countsByResolution: {}, unresolvedRate: 0 },
+      diagnostics: []
+    });
+
+    expect(verifyContentHash(snapshot)).toBe(true);
+    expect(verifyContentHash({ ...snapshot, files: [{ ...snapshot.files[0]!, loc: 2 }] })).toBe(
+      false
+    );
   });
 });

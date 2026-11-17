@@ -4,9 +4,14 @@ import path from "node:path";
 
 import type { AnalysisConfig } from "@archmind/contracts";
 import { canonicalJson, compareStrings } from "@archmind/domain";
-import ignore from "ignore";
+import ignore, { type Ignore } from "ignore";
 import { minimatch } from "minimatch";
 
+import {
+  PACKAGE_MANIFEST_FILE_NAME,
+  isExcludedDirectory,
+  isRepositoryOrPackageRoot
+} from "./repository-files.js";
 import {
   DEFAULT_SOURCE_PROVIDER_LIMITS,
   type DiscoveredSourceFile,
@@ -29,14 +34,8 @@ const ANALYSABLE_EXTENSIONS = new Set([
   ".cjs"
 ]);
 
-const EXCLUDED_DIRECTORY_NAMES = new Set([
-  "node_modules",
-  "dist",
-  "build",
-  "out",
-  "coverage",
-  ".next"
-]);
+const GITIGNORE_FILE_NAME = ".gitignore";
+const PNPM_WORKSPACE_FILE_NAME = "pnpm-workspace.yaml";
 
 const GENERATED_FILE_PATTERNS = [
   "**/*.generated.*",
@@ -74,68 +73,84 @@ interface SourceFileCandidate {
   sizeBytes: number;
 }
 
+interface IgnoreScope {
+  /** Repo-relative POSIX directory containing the `.gitignore`, "" for the repository root. */
+  baseDirectory: string;
+  matcher: Ignore;
+}
+
+interface DiscoveryState {
+  repositoryRoot: string;
+  limits: SourceProviderLimits;
+  diagnostics: SourceProviderDiagnostic[];
+  candidates: SourceFileCandidate[];
+  resolutionInputs: ResolutionInputFile[];
+}
+
+interface ResolutionInputFile {
+  path: string;
+  contentHash: string;
+}
+
 export class LocalFsSourceProvider implements SourceProvider {
   public async discover(input: SourceProviderInput): Promise<SourceProviderResult> {
     const repositoryRoot = path.resolve(input.repositoryRoot);
-    const diagnostics: SourceProviderDiagnostic[] = [];
-    const limits = this.resolveLimits(input.limits);
     const rolePatterns = resolveRolePatterns(input.analysisConfig);
-
-    const rootIgnore = await this.loadRootGitIgnore(repositoryRoot);
-    const sourceFiles = await this.discoverCandidates(
+    const state: DiscoveryState = {
       repositoryRoot,
-      repositoryRoot,
-      rootIgnore,
-      limits,
-      diagnostics
-    );
+      limits: this.resolveLimits(input.limits),
+      diagnostics: [],
+      candidates: [],
+      resolutionInputs: []
+    };
 
-    sourceFiles.sort((left, right) => compareStrings(left.path, right.path));
+    await this.visitDirectory(repositoryRoot, [], state);
 
+    state.candidates.sort((left, right) => compareStrings(left.path, right.path));
+    state.resolutionInputs.sort((left, right) => compareStrings(left.path, right.path));
+
+    // Each file is read once; hash, line count and parsing all use these bytes.
     const files: DiscoveredSourceFile[] = [];
-    for (const file of sourceFiles) {
-      const content = await readFile(file.absolutePath);
+    for (const candidate of state.candidates) {
+      const bytes = await readFile(candidate.absolutePath);
+      const content = bytes.toString("utf8");
       files.push({
-        path: file.path,
-        role: classifyFileRole(file.path, rolePatterns),
-        sizeBytes: file.sizeBytes,
-        contentHash: sha256(content)
+        path: candidate.path,
+        role: classifyFileRole(candidate.path, rolePatterns),
+        sizeBytes: bytes.length,
+        contentHash: sha256(bytes),
+        loc: countLines(content),
+        content
       });
     }
 
     return {
       files,
-      diagnostics,
-      sourceHash: createSourceHash(files, input.analysisConfig)
+      diagnostics: state.diagnostics,
+      sourceHash: createSourceHash(files, state.resolutionInputs, input.analysisConfig)
     };
   }
 
-  private async loadRootGitIgnore(repositoryRoot: string) {
-    const ignoreFilePath = path.join(repositoryRoot, ".gitignore");
-
-    try {
-      const content = await readFile(ignoreFilePath, "utf8");
-      return ignore().add(content);
-    } catch (error) {
-      if (isNodeError(error) && error.code === "ENOENT") {
-        return ignore();
-      }
-
-      throw error;
-    }
-  }
-
-  private async discoverCandidates(
-    repositoryRoot: string,
+  private async visitDirectory(
     currentDirectory: string,
-    rootIgnore: ReturnType<typeof ignore>,
-    limits: SourceProviderLimits,
-    diagnostics: SourceProviderDiagnostic[]
-  ): Promise<SourceFileCandidate[]> {
+    inheritedScopes: IgnoreScope[],
+    state: DiscoveryState
+  ): Promise<void> {
+    const { repositoryRoot, limits, diagnostics } = state;
     const entries = await readdir(currentDirectory, { withFileTypes: true });
     entries.sort((left, right) => compareStrings(left.name, right.name));
 
-    const sourceFiles: SourceFileCandidate[] = [];
+    const currentRelativeDirectory = toPosixPath(path.relative(repositoryRoot, currentDirectory));
+    const scopes = await this.withDirectoryGitIgnore(
+      currentDirectory,
+      currentRelativeDirectory,
+      entries,
+      inheritedScopes
+    );
+    const isPackageOrRepositoryRoot = isRepositoryOrPackageRoot(
+      currentDirectory === repositoryRoot,
+      entries
+    );
 
     for (const entry of entries) {
       const absolutePath = path.join(currentDirectory, entry.name);
@@ -146,11 +161,11 @@ export class LocalFsSourceProvider implements SourceProvider {
       }
 
       const isDirectory = entry.isDirectory();
-      if (isDirectory && EXCLUDED_DIRECTORY_NAMES.has(entry.name)) {
+      if (isDirectory && isExcludedDirectory(entry.name, isPackageOrRepositoryRoot)) {
         continue;
       }
 
-      if (rootIgnore.ignores(isDirectory ? `${relativePath}/` : relativePath)) {
+      if (isIgnored(relativePath, isDirectory, scopes)) {
         continue;
       }
 
@@ -165,14 +180,7 @@ export class LocalFsSourceProvider implements SourceProvider {
       }
 
       if (isDirectory) {
-        const nestedFiles = await this.discoverCandidates(
-          repositoryRoot,
-          absolutePath,
-          rootIgnore,
-          limits,
-          diagnostics
-        );
-        sourceFiles.push(...nestedFiles);
+        await this.visitDirectory(absolutePath, scopes, state);
         continue;
       }
 
@@ -180,11 +188,14 @@ export class LocalFsSourceProvider implements SourceProvider {
         continue;
       }
 
-      if (!isAnalysableSourceFile(relativePath)) {
-        continue;
+      if (isResolutionInputFile(relativePath)) {
+        state.resolutionInputs.push({
+          path: relativePath,
+          contentHash: sha256(await readFile(absolutePath))
+        });
       }
 
-      if (isGeneratedFile(relativePath)) {
+      if (!isAnalysableSourceFile(relativePath) || isGeneratedFile(relativePath)) {
         continue;
       }
 
@@ -199,14 +210,29 @@ export class LocalFsSourceProvider implements SourceProvider {
         continue;
       }
 
-      sourceFiles.push({
+      state.candidates.push({
         path: relativePath,
         absolutePath,
         sizeBytes: metadata.size
       });
     }
+  }
 
-    return sourceFiles;
+  private async withDirectoryGitIgnore(
+    directory: string,
+    relativeDirectory: string,
+    entries: ReadonlyArray<{ name: string; isFile(): boolean }>,
+    inheritedScopes: IgnoreScope[]
+  ): Promise<IgnoreScope[]> {
+    const hasGitIgnore = entries.some(
+      (entry) => entry.isFile() && entry.name === GITIGNORE_FILE_NAME
+    );
+    if (!hasGitIgnore) {
+      return inheritedScopes;
+    }
+
+    const content = await readFile(path.join(directory, GITIGNORE_FILE_NAME), "utf8");
+    return [...inheritedScopes, { baseDirectory: relativeDirectory, matcher: ignore().add(content) }];
   }
 
   private resolveLimits(
@@ -216,6 +242,44 @@ export class LocalFsSourceProvider implements SourceProvider {
       maxFileBytes: inputLimits?.maxFileBytes ?? DEFAULT_SOURCE_PROVIDER_LIMITS.maxFileBytes
     };
   }
+}
+
+/** Nested `.gitignore` files apply to their own subtree and take precedence over outer ones. */
+function isIgnored(relativePath: string, isDirectory: boolean, scopes: IgnoreScope[]): boolean {
+  for (let index = scopes.length - 1; index >= 0; index -= 1) {
+    const scope = scopes[index];
+    if (!scope) {
+      continue;
+    }
+
+    const scopedPath = scope.baseDirectory
+      ? relativePath.slice(scope.baseDirectory.length + 1)
+      : relativePath;
+    const result = scope.matcher.test(isDirectory ? `${scopedPath}/` : scopedPath);
+    if (result.ignored) {
+      return true;
+    }
+
+    if (result.unignored) {
+      return false;
+    }
+  }
+
+  return false;
+}
+
+/** Files whose content changes how imports resolve, so they feed the source hash. */
+function isResolutionInputFile(relativePath: string): boolean {
+  const fileName = path.posix.basename(relativePath);
+  return (
+    fileName === PACKAGE_MANIFEST_FILE_NAME ||
+    (fileName.startsWith("tsconfig") && fileName.endsWith(".json")) ||
+    relativePath === PNPM_WORKSPACE_FILE_NAME
+  );
+}
+
+function countLines(content: string): number {
+  return content.length === 0 ? 0 : content.split(/\r?\n/u).length;
 }
 
 function resolveRolePatterns(
@@ -266,6 +330,7 @@ function isGeneratedFile(filePath: string): boolean {
 
 function createSourceHash(
   files: DiscoveredSourceFile[],
+  resolutionInputs: ResolutionInputFile[],
   analysisConfig: AnalysisConfig
 ): string {
   const payload = {
@@ -273,6 +338,7 @@ function createSourceHash(
       path: file.path,
       contentHash: file.contentHash
     })),
+    resolutionInputs,
     analysisConfig
   };
 
@@ -287,11 +353,3 @@ function toPosixPath(filePath: string): string {
   return filePath.split(path.sep).join(path.posix.sep);
 }
 
-function isNodeError(error: unknown): error is { code: string } {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    typeof (error as { code: unknown }).code === "string"
-  );
-}

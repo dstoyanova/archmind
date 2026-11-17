@@ -53,3 +53,11 @@ File roles are classified deterministically as `source`, `test`, `story`, `scrip
 - Inference may not match all repositories without configuration tuning.
 - Depth-2 folder inference can produce noisy components in highly mixed directory layouts.
 - Requires careful documentation so users understand ownership priority and override behavior.
+
+## Addendum (2026-11-17): configuration rules
+
+- **Strict schema.** `analysis`, `analysis.fileRoles` and each configured component reject unknown keys, so a typo such as `componentRoot` is an error and not silently ignored. `source` is the fallback role and cannot be overridden in `fileRoles`. Component names must be unique.
+- **Normalised keys.** `componentRoots` keys and values are normalised (`./apps/api/` becomes `apps/api`), and two keys that normalise to the same path are rejected.
+- **Stable IDs.** A configured component's ID is derived from its name (`configured:<name>`), not its position in the array, so reordering the configuration does not rename components. Baselines depend on this.
+- **Parent diagnostics.** A configured `parent` that names no configured component, or that sits on a parent cycle, produces a `CONFIG_COMPONENT_PARENT_UNKNOWN` or `CONFIG_COMPONENT_PARENT_CYCLE` warning, and the component is attached to the root.
+- **Nested packages.** Folder components are built only from files owned by the package itself. Files owned by a nested package never create folders in an outer package.

@@ -27,6 +27,7 @@ export type ImportResolution =
   | "workspace-package"
   | "external-package"
   | "node-built-in"
+  | "asset"
   | "unresolved";
 
 export interface ResolutionStats {
@@ -86,7 +87,12 @@ interface ResolutionContext {
   repositoryRoot: string;
   repositoryFiles: Set<string>;
   tsConfigByDirectory: Map<string, ParsedTsConfig>;
+  /** The nearest tsconfig that lists each file; files it does not list fall back to their ancestors. */
+  tsConfigByIncludedFile: Map<string, ParsedTsConfig>;
   workspacePackagesByName: Map<string, WorkspacePackage>;
+  /** Every package.json directory, deepest first, so `#` imports find their owning manifest. */
+  packageManifests: Array<{ directory: string; manifest: PackageManifest }>;
+  resolutionHost: ts.ModuleResolutionHost;
 }
 
 export async function resolveFileImports(
@@ -120,13 +126,26 @@ export async function resolveFileImports(
     repositoryRoot,
     repositoryFiles,
     tsConfigByDirectory,
-    workspacePackagesByName
+    tsConfigByIncludedFile: indexTsConfigsByIncludedFile(tsConfigByDirectory),
+    workspacePackagesByName,
+    packageManifests: [...workspace.packages].sort(
+      (left, right) =>
+        right.directory.length - left.directory.length ||
+        compareStrings(left.directory, right.directory)
+    ),
+    resolutionHost: createRestrictedModuleResolutionHost(
+      repositoryRoot,
+      repositoryFiles,
+      indexDirectories(repositoryFiles)
+    )
   };
+  const analysedFilePaths = new Set(input.files.map((file) => file.filePath));
 
   const candidateImportCount = countCandidateImports(input.imports, context);
   const resolvedImports = input.imports
     .map((importItem) => resolveOneImport(importItem, context, diagnostics))
     .sort(compareResolvedImports);
+  diagnostics.push(...findImportsIntoExcludedFiles(resolvedImports, analysedFilePaths));
 
   const unresolvedCandidates = resolvedImports.filter(
     (item) => item.resolution === "unresolved" && isCandidateInternalImport(item.specifier, context)
@@ -309,13 +328,29 @@ function resolveOneImport(
     };
   }
 
-  const fileTsConfig = findNearestTsConfig(importItem.filePath, context.tsConfigByDirectory);
+  if (isAssetSpecifier(importItem.specifier)) {
+    return {
+      ...importItem,
+      resolution: "asset"
+    };
+  }
+
+  const fileTsConfig = findNearestTsConfig(importItem.filePath, context);
   const resolvedByTypeScript = resolveWithTypeScript(importItem, context, fileTsConfig?.options);
   if (resolvedByTypeScript) {
     return {
       ...importItem,
       resolution: "internal-file",
       resolvedFilePath: resolvedByTypeScript
+    };
+  }
+
+  const resolvedByPackageImports = resolvePackageImportsEntry(importItem, context);
+  if (resolvedByPackageImports) {
+    return {
+      ...importItem,
+      resolution: "internal-file",
+      resolvedFilePath: resolvedByPackageImports
     };
   }
 
@@ -346,10 +381,6 @@ function resolveWithTypeScript(
   options?: ts.CompilerOptions
 ): string | null {
   const containingFilePath = path.join(context.repositoryRoot, importItem.filePath);
-  const resolutionHost = createRestrictedModuleResolutionHost(
-    context.repositoryRoot,
-    context.repositoryFiles
-  );
   const moduleResolution = ts.resolveModuleName(
     importItem.specifier,
     containingFilePath,
@@ -358,7 +389,7 @@ function resolveWithTypeScript(
       module: ts.ModuleKind.NodeNext,
       allowJs: true
     },
-    resolutionHost
+    context.resolutionHost
   );
 
   const resolvedFileName = moduleResolution.resolvedModule?.resolvedFileName;
@@ -372,6 +403,44 @@ function resolveWithTypeScript(
   }
 
   return resolveToKnownSourceFile(relativePath, context.repositoryFiles);
+}
+
+/**
+ * Fallback for `#` specifiers that TypeScript rejects, such as an `imports` target outside
+ * the package (`"#utils": "../utils/index.ts"`). Node forbids those, but bundlers accept them.
+ */
+function resolvePackageImportsEntry(
+  importItem: ExtractedFileImport,
+  context: ResolutionContext
+): string | null {
+  if (!importItem.specifier.startsWith("#")) {
+    return null;
+  }
+
+  const owner = context.packageManifests.find(
+    ({ directory }) =>
+      directory === "." ||
+      importItem.filePath === directory ||
+      importItem.filePath.startsWith(`${directory}/`)
+  );
+  const imports = owner?.manifest.imports;
+  if (!owner || !imports || typeof imports !== "object") {
+    return null;
+  }
+
+  // `imports` keys look like `#name`; exports-style matching expects `./name`.
+  const asExports = Object.fromEntries(
+    Object.entries(imports).map(([key, value]) => [key.replace(/^#/u, "./"), value])
+  );
+  const target = resolveExportsTarget(asExports, importItem.specifier.slice(1));
+  if (!target || target.startsWith("#") || !target.startsWith(".")) {
+    return null;
+  }
+
+  const candidate = path.posix.normalize(
+    owner.directory === "." ? target : `${owner.directory}/${target}`
+  );
+  return resolveToKnownSourceFile(candidate, context.repositoryFiles);
 }
 
 function resolveWorkspaceImportToSourceFile(
@@ -585,7 +654,12 @@ function countCandidateImports(
 }
 
 function isCandidateInternalImport(specifier: string, context: ResolutionContext): boolean {
-  if (specifier.startsWith(".") || specifier.startsWith("/")) {
+  if (isAssetSpecifier(specifier)) {
+    return false;
+  }
+
+  // `#` specifiers are the package's own `imports` map, so they are internal by definition.
+  if (specifier.startsWith(".") || specifier.startsWith("/") || specifier.startsWith("#")) {
     return true;
   }
 
@@ -650,24 +724,33 @@ function isBareSpecifier(specifier: string): boolean {
   return !specifier.startsWith(".") && !specifier.startsWith("/") && !specifier.startsWith("#");
 }
 
-function findNearestTsConfig(
-  filePath: string,
+function indexTsConfigsByIncludedFile(
   tsConfigByDirectory: Map<string, ParsedTsConfig>
-): ParsedTsConfig | null {
-  const included = [...tsConfigByDirectory.values()].filter((config) =>
-    config.fileNames.has(filePath)
-  );
+): Map<string, ParsedTsConfig> {
+  const configByFile = new Map<string, ParsedTsConfig>();
+  for (const config of tsConfigByDirectory.values()) {
+    for (const fileName of config.fileNames) {
+      const existing = configByFile.get(fileName);
+      if (!existing || config.directory.length > existing.directory.length) {
+        configByFile.set(fileName, config);
+      }
+    }
+  }
 
-  if (included.length > 0) {
-    included.sort((left, right) => right.directory.length - left.directory.length);
-    return included[0] ?? null;
+  return configByFile;
+}
+
+function findNearestTsConfig(filePath: string, context: ResolutionContext): ParsedTsConfig | null {
+  const included = context.tsConfigByIncludedFile.get(filePath);
+  if (included) {
+    return included;
   }
 
   const directories = toPathSegments(path.posix.dirname(filePath));
   for (let segmentCount = directories.length; segmentCount >= 0; segmentCount -= 1) {
     const candidateDirectory =
       segmentCount === 0 ? "." : directories.slice(0, segmentCount).join("/");
-    const found = tsConfigByDirectory.get(candidateDirectory);
+    const found = context.tsConfigByDirectory.get(candidateDirectory);
     if (found) {
       return found;
     }
@@ -726,9 +809,32 @@ function createRestrictedParseConfigHost(
   };
 }
 
+/** Child directory names by repo-relative directory ("" is the root), so directory queries need no file scan. */
+type DirectoryIndex = Map<string, Set<string>>;
+
+function indexDirectories(repositoryFiles: Set<string>): DirectoryIndex {
+  const index: DirectoryIndex = new Map([["", new Set<string>()]]);
+  for (const filePath of repositoryFiles) {
+    const segments = filePath.split("/").slice(0, -1);
+    let parent = "";
+    for (const segment of segments) {
+      index.get(parent)?.add(segment);
+      const directory = parent ? `${parent}/${segment}` : segment;
+      if (!index.has(directory)) {
+        index.set(directory, new Set<string>());
+      }
+
+      parent = directory;
+    }
+  }
+
+  return index;
+}
+
 function createRestrictedModuleResolutionHost(
   repositoryRoot: string,
-  repositoryFiles: Set<string>
+  repositoryFiles: Set<string>,
+  directoryIndex: DirectoryIndex
 ): ts.ModuleResolutionHost {
   return {
     fileExists(fileName) {
@@ -744,7 +850,8 @@ function createRestrictedModuleResolutionHost(
       return ts.sys.readFile(path.join(repositoryRoot, relativePath ?? ""));
     },
     directoryExists(directoryName) {
-      return directoryExistsWithinRepository(repositoryRoot, repositoryFiles, directoryName);
+      const relativeDirectory = toRepositoryRelativePath(repositoryRoot, directoryName);
+      return relativeDirectory !== null && directoryIndex.has(relativeDirectory);
     },
     getDirectories(directoryName) {
       const relativeDirectory = toRepositoryRelativePath(repositoryRoot, directoryName);
@@ -752,21 +859,9 @@ function createRestrictedModuleResolutionHost(
         return [];
       }
 
-      const prefix = relativeDirectory ? `${relativeDirectory}/` : "";
-      const directories = new Set<string>();
-      for (const filePath of repositoryFiles) {
-        if (!filePath.startsWith(prefix)) {
-          continue;
-        }
-
-        const rest = filePath.slice(prefix.length);
-        const [segment] = rest.split("/");
-        if (segment && rest.includes("/")) {
-          directories.add(path.join(directoryName, segment));
-        }
-      }
-
-      return [...directories].sort();
+      return [...(directoryIndex.get(relativeDirectory ?? "") ?? [])]
+        .map((segment) => path.join(directoryName, segment))
+        .sort();
     },
     realpath(fileName) {
       const relativePath = toRepositoryRelativePath(repositoryRoot, fileName);
@@ -835,26 +930,6 @@ function fileExistsWithinRepository(
   }
 
   return repositoryFiles.has(relativeFilePath);
-}
-
-function directoryExistsWithinRepository(
-  repositoryRoot: string,
-  repositoryFiles: Set<string>,
-  directoryPath: string
-): boolean {
-  const relativeDirectory = toRepositoryRelativePath(repositoryRoot, directoryPath);
-  if (relativeDirectory === null) {
-    return false;
-  }
-
-  const prefix = relativeDirectory ? `${relativeDirectory}/` : "";
-  for (const filePath of repositoryFiles) {
-    if (filePath.startsWith(prefix)) {
-      return true;
-    }
-  }
-
-  return false;
 }
 
 function toRepositoryRelativePath(repositoryRoot: string, candidatePath: string): string | null {
@@ -991,6 +1066,42 @@ function isUnresolvedPackageExtends(
     diagnostic.code === TS_FILE_NOT_FOUND &&
     bareExtends.some((specifier) => message.includes(`'${specifier}'`))
   );
+}
+
+const ASSET_EXTENSIONS = new Set([
+  ".css", ".scss", ".sass", ".less", ".styl",
+  ".json", ".yaml", ".yml", ".toml", ".txt", ".md", ".html", ".graphql", ".gql", ".wasm",
+  ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".ico", ".bmp",
+  ".woff", ".woff2", ".ttf", ".otf", ".eot",
+  ".mp3", ".mp4", ".webm", ".wav", ".ogg", ".pdf"
+]);
+
+/** A relative import of a non-code file, such as `./styles.css`, with an optional `?query` or `#hash`. */
+function isAssetSpecifier(specifier: string): boolean {
+  if (!specifier.startsWith(".") && !specifier.startsWith("/")) {
+    return false;
+  }
+
+  const pathPart = specifier.replace(/[?#].*$/u, "");
+  return ASSET_EXTENSIONS.has(path.posix.extname(pathPart).toLowerCase());
+}
+
+/** Imports that resolve to a real file the analysis left out would otherwise vanish without a trace. */
+function findImportsIntoExcludedFiles(
+  resolvedImports: ResolvedFileImport[],
+  analysedFilePaths: ReadonlySet<string>
+): ModuleResolutionDiagnostic[] {
+  return resolvedImports
+    .filter(
+      (item) => item.resolvedFilePath !== undefined && !analysedFilePaths.has(item.resolvedFilePath)
+    )
+    .map((item) => ({
+      severity: "warning",
+      code: "IMPORT_TARGET_EXCLUDED",
+      message: `Import "${item.specifier}" resolves to "${item.resolvedFilePath ?? ""}", which is excluded from analysis (ignored, generated, oversized or a declaration file); no dependency is recorded.`,
+      filePath: item.filePath,
+      line: item.line
+    }));
 }
 
 function dedupe(values: string[]): string[] {

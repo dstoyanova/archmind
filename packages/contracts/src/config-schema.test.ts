@@ -18,8 +18,7 @@ describe("archmindConfigSchema", () => {
         components: [
           {
             name: "api",
-            paths: ["apps/api/src/**"],
-            parent: "root"
+            paths: ["apps/api/src/**"]
           }
         ],
         componentRoots: {
@@ -33,5 +32,42 @@ describe("archmindConfigSchema", () => {
 
     expect(parsed.analysis.components).toHaveLength(1);
     expect(parsed.analysis.fileRoles.test).toEqual(["**/*.spec.ts"]);
+  });
+
+  it("rejects unknown analysis keys such as a misspelled componentRoots", () => {
+    const result = archmindConfigSchema.safeParse({
+      analysis: { componentRoot: { "apps/api": "src" } }
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a source file role override", () => {
+    const result = archmindConfigSchema.safeParse({
+      analysis: { fileRoles: { source: ["src/**"] } }
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects duplicate component names", () => {
+    const result = archmindConfigSchema.safeParse({
+      analysis: {
+        components: [
+          { name: "api", paths: ["a/**"] },
+          { name: "api", paths: ["b/**"] }
+        ]
+      }
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it("normalises componentRoots keys", () => {
+    const parsed = archmindConfigSchema.parse({
+      analysis: { componentRoots: { "./apps/api/": "./src/modules/" } }
+    });
+
+    expect(parsed.analysis.componentRoots).toEqual({ "apps/api": "src/modules" });
   });
 });

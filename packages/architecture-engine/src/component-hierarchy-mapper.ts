@@ -24,9 +24,16 @@ export interface MapFilesToComponentHierarchyInput {
   packageDirectories: string[];
 }
 
+export interface HierarchyDiagnostic {
+  severity: "warning";
+  code: "CONFIG_COMPONENT_PARENT_UNKNOWN" | "CONFIG_COMPONENT_PARENT_CYCLE";
+  message: string;
+}
+
 export interface MapFilesToComponentHierarchyResult {
   components: HierarchyComponent[];
   ownership: FileOwnership[];
+  diagnostics: HierarchyDiagnostic[];
 }
 
 const MINIMATCH_OPTIONS = {
@@ -76,14 +83,17 @@ export function mapFilesToComponentHierarchy(
   createFolderComponents(
     packageContexts,
     filePaths,
+    packageDirectories,
     components,
     componentById
   );
 
+  const diagnostics: HierarchyDiagnostic[] = [];
   const configuredComponents = createConfiguredComponents(
     input.analysisConfig,
     components,
-    componentById
+    componentById,
+    diagnostics
   );
 
   const packageComponentsByDirectory = new Map(
@@ -134,7 +144,11 @@ export function mapFilesToComponentHierarchy(
 
   return {
     components: publicComponents,
-    ownership
+    ownership,
+    diagnostics: diagnostics.sort(
+      (left, right) =>
+        compareStrings(left.code, right.code) || compareStrings(left.message, right.message)
+    )
   };
 }
 
@@ -179,11 +193,15 @@ function createPackageComponents(
 function createFolderComponents(
   packageContexts: PackageContext[],
   filePaths: string[],
+  packageDirectories: string[],
   components: InternalComponent[],
   componentById: Map<string, InternalComponent>
 ): void {
   for (const pkg of packageContexts) {
-    const childFolders = findImmediateFoldersUnderRoot(filePaths, pkg.componentRootPath);
+    const ownedFilePaths = filePaths.filter(
+      (filePath) => findOwningPackageDirectory(filePath, packageDirectories) === pkg.packageDirectory
+    );
+    const childFolders = findImmediateFoldersUnderRoot(ownedFilePaths, pkg.componentRootPath);
     for (const folderPath of childFolders) {
       const folderName = folderPath.split("/").at(-1);
       if (!folderName) {
@@ -207,67 +225,106 @@ function createFolderComponents(
 function createConfiguredComponents(
   analysisConfig: AnalysisConfig,
   components: InternalComponent[],
-  componentById: Map<string, InternalComponent>
+  componentById: Map<string, InternalComponent>,
+  diagnostics: HierarchyDiagnostic[]
 ): InternalComponent[] {
-  const configured = analysisConfig.components.map((entry, index) => ({
-    index,
-    name: entry.name,
-    parent: entry.parent,
-    paths: [...entry.paths]
-  }));
+  const configured = analysisConfig.components;
   const configuredByName = new Map<string, InternalComponent>();
-  const pending = new Set(configured.map((entry) => entry.name));
-
-  let changed = true;
-  while (pending.size > 0 && changed) {
-    changed = false;
-
-    for (const entry of configured) {
-      if (!pending.has(entry.name)) {
-        continue;
-      }
-
-      const parentComponent =
-        entry.parent === undefined ? componentById.get("root") : configuredByName.get(entry.parent);
-      if (!parentComponent) {
-        continue;
-      }
-
-      const component: InternalComponent = {
-        id: buildComponentId("configured", `${entry.index}:${entry.name}`),
-        name: entry.name,
-        parentId: parentComponent.id,
-        depth: parentComponent.depth + 1,
-        kind: "configured",
-        paths: entry.paths.map(normalizePath)
-      };
-      components.push(component);
-      componentById.set(component.id, component);
-      configuredByName.set(entry.name, component);
-      pending.delete(entry.name);
-      changed = true;
-    }
+  const pending = new Map(configured.map((entry) => [entry.name, entry] as const));
+  const root = componentById.get("root");
+  if (!root) {
+    throw new Error("Component hierarchy is missing its root component.");
   }
 
-  for (const entry of configured) {
-    if (!pending.has(entry.name)) {
-      continue;
+  while (pending.size > 0) {
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const entry of configured) {
+        if (!pending.has(entry.name)) {
+          continue;
+        }
+
+        const parentComponent =
+          entry.parent === undefined ? root : configuredByName.get(entry.parent);
+        if (!parentComponent) {
+          continue;
+        }
+
+        addConfiguredComponent(entry, parentComponent, components, componentById, configuredByName);
+        pending.delete(entry.name);
+        changed = true;
+      }
     }
 
-    const fallbackComponent: InternalComponent = {
-      id: buildComponentId("configured", `${entry.index}:${entry.name}`),
-      name: entry.name,
-      parentId: "root",
-      depth: 1,
-      kind: "configured",
-      paths: entry.paths.map(normalizePath)
-    };
-    components.push(fallbackComponent);
-    componentById.set(fallbackComponent.id, fallbackComponent);
-    configuredByName.set(entry.name, fallbackComponent);
+    // Remaining entries have an unknown parent or sit on, or below, a parent cycle. Attach the
+    // first root cause to the root and report it; its descendants then resolve normally.
+    const rootCause = configured.find(
+      (entry) =>
+        pending.has(entry.name) &&
+        (entry.parent === undefined || !pending.has(entry.parent) || isOnParentCycle(entry, pending))
+    );
+    if (!rootCause) {
+      break;
+    }
+
+    diagnostics.push(
+      pending.has(rootCause.parent ?? "")
+        ? {
+            severity: "warning",
+            code: "CONFIG_COMPONENT_PARENT_CYCLE",
+            message: `Configured component "${rootCause.name}" is on a parent cycle; attaching it to the root.`
+          }
+        : {
+            severity: "warning",
+            code: "CONFIG_COMPONENT_PARENT_UNKNOWN",
+            message: `Configured component "${rootCause.name}" references unknown parent "${rootCause.parent ?? ""}"; attaching it to the root.`
+          }
+    );
+    addConfiguredComponent(rootCause, root, components, componentById, configuredByName);
+    pending.delete(rootCause.name);
   }
 
   return [...configuredByName.values()].sort(compareComponents);
+}
+
+function isOnParentCycle(
+  entry: AnalysisConfig["components"][number],
+  pending: ReadonlyMap<string, AnalysisConfig["components"][number]>
+): boolean {
+  const visited = new Set<string>();
+  let current = entry.parent === undefined ? undefined : pending.get(entry.parent);
+  while (current && !visited.has(current.name)) {
+    if (current.name === entry.name) {
+      return true;
+    }
+
+    visited.add(current.name);
+    current = current.parent === undefined ? undefined : pending.get(current.parent);
+  }
+
+  return false;
+}
+
+function addConfiguredComponent(
+  entry: AnalysisConfig["components"][number],
+  parentComponent: InternalComponent,
+  components: InternalComponent[],
+  componentById: Map<string, InternalComponent>,
+  configuredByName: Map<string, InternalComponent>
+): void {
+  const component: InternalComponent = {
+    // Derived from the unique name, not the array position, so reordering the config keeps IDs stable.
+    id: buildComponentId("configured", entry.name),
+    name: entry.name,
+    parentId: parentComponent.id,
+    depth: parentComponent.depth + 1,
+    kind: "configured",
+    paths: entry.paths.map(normalizePath)
+  };
+  components.push(component);
+  componentById.set(component.id, component);
+  configuredByName.set(entry.name, component);
 }
 
 function findConfiguredMatch(

@@ -39,7 +39,7 @@ describe("mapFilesToComponentHierarchy", () => {
       expect.arrayContaining([
         expect.objectContaining({ id: "root", kind: "root", depth: 0 }),
         expect.objectContaining({
-          id: "configured:0:api-shared",
+          id: "configured:api-shared",
           kind: "configured"
         }),
         expect.objectContaining({
@@ -76,7 +76,7 @@ describe("mapFilesToComponentHierarchy", () => {
       },
       {
         filePath: "apps/api/src/shared/constants.ts",
-        componentId: "configured:0:api-shared"
+        componentId: "configured:api-shared"
       },
       {
         filePath: "packages/domain/src/model.ts",
@@ -115,5 +115,59 @@ describe("mapFilesToComponentHierarchy", () => {
       "apps/api/src/modules/auth/auth.module.ts",
       "apps/api/src/modules/billing/service.ts"
     ]);
+  });
+
+  it("does not create folder components from files owned by nested packages", () => {
+    const result = mapFilesToComponentHierarchy({
+      analysisConfig: analysisConfig(),
+      packageDirectories: [".", "packages/a"],
+      filePaths: ["package.json", "packages/a/package.json", "packages/a/src/x/y.ts"]
+    });
+
+    const folderPaths = result.components
+      .filter((component) => component.kind === "folder")
+      .map((component) => component.paths[0]);
+    expect(folderPaths).toEqual(["packages/a/src/x"]);
+    expect(folderPaths).not.toContain("packages");
+  });
+
+  it("keeps configured component IDs independent of config order", () => {
+    const components = [
+      { name: "a", paths: ["a/**"] },
+      { name: "b", paths: ["b/**"] }
+    ];
+    const idsFor = (ordered: typeof components) =>
+      mapFilesToComponentHierarchy({
+        analysisConfig: analysisConfig({ components: ordered }),
+        packageDirectories: [],
+        filePaths: ["a/x.ts", "b/y.ts"]
+      }).ownership;
+
+    expect(idsFor(components)).toEqual(idsFor([...components].reverse()));
+  });
+
+  it("reports unknown and cyclic configured parents and attaches them to the root", () => {
+    const result = mapFilesToComponentHierarchy({
+      analysisConfig: analysisConfig({
+        components: [
+          { name: "orphan", paths: ["orphan/**"], parent: "missing" },
+          { name: "child-of-orphan", paths: ["child/**"], parent: "orphan" },
+          { name: "loop-a", paths: ["a/**"], parent: "loop-b" },
+          { name: "loop-b", paths: ["b/**"], parent: "loop-a" }
+        ]
+      }),
+      packageDirectories: [],
+      filePaths: ["orphan/x.ts", "child/x.ts", "a/x.ts", "b/x.ts"]
+    });
+
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "CONFIG_COMPONENT_PARENT_CYCLE",
+      "CONFIG_COMPONENT_PARENT_UNKNOWN"
+    ]);
+    const parentOf = (id: string) => result.components.find((component) => component.id === id)?.parentId;
+    expect(parentOf("configured:orphan")).toBe("root");
+    expect(parentOf("configured:child-of-orphan")).toBe("configured:orphan");
+    expect(parentOf("configured:loop-a")).toBe("root");
+    expect(parentOf("configured:loop-b")).toBe("configured:loop-a");
   });
 });
