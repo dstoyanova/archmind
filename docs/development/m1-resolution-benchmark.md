@@ -11,7 +11,7 @@ This document records M1 benchmark evidence for:
 - Reference-edge generator: [generate-reference-edges.mjs](../../apps/cli/scripts/generate-reference-edges.mjs)
   - Uses TypeScript module resolution (`ts.resolveModuleName`) as an external reference implementation for internal file edges.
 - Benchmark runner: `resolution-benchmark`
-- Date: 2026-11-17 (re-run after the P2 review fixes; the 2026-11-16 results are superseded)
+- Date: 2026-11-17 (re-run after the code review fixes; the 2026-11-16 results are superseded)
 - Engine version: `0.2.0`, parser (TypeScript) `5.9.3`
 - Machine: Apple M4, 16 GB RAM, macOS (arm64), Node.js v24
 - Repositories, shallow clones at: `vitest-dev/vitest@4e905a1`, `changesets/changesets@9a035ec`, `microsoft/vscode@6b7ba7e`
@@ -46,16 +46,16 @@ This document records M1 benchmark evidence for:
 
 ### NFR-8 (open-source monorepos)
 
-| Repository | Files | Duration (ms) | Unresolved rate | Agreement | Unresolved <= 2% | Agreement >= 95% |
-| --- | ---: | ---: | ---: | ---: | :---: | :---: |
-| vitest-dev/vitest | 2,430 | 1,664 | 0.99% | 95.02% | ✅ | ✅ |
-| changesets/changesets | 164 | 172 | 0.00% | 100.00% | ✅ | ✅ |
+| Repository            | Files | Duration (ms) | Unresolved rate | Agreement | Unresolved <= 2% | Agreement >= 95% |
+| --------------------- | ----: | ------------: | --------------: | --------: | :--------------: | :--------------: |
+| vitest-dev/vitest     | 2,430 |         1,664 |           0.99% |    95.02% |        ✅        |        ✅        |
+| changesets/changesets |   164 |           172 |           0.00% |   100.00% |        ✅        |        ✅        |
 
 ### NFR-7 (performance)
 
-| Repository | Files | Duration (seconds) | Target (< 120s when files >= 5,000) |
-| --- | ---: | ---: | :---: |
-| microsoft/vscode | 14,876 | 22.49 | ✅ |
+| Repository       |  Files | Duration (seconds) | Target (< 120s when files >= 5,000) |
+| ---------------- | -----: | -----------------: | :---------------------------------: |
+| microsoft/vscode | 14,876 |              22.49 |                 ✅                  |
 
 ## Notes on the 2026-11-17 re-run
 
