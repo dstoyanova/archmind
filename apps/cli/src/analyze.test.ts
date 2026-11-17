@@ -219,6 +219,62 @@ describe("analyzeRepository", () => {
   });
 });
 
+describe("analyzeRepository reproducibility", () => {
+  async function analyzeInTempCopy(fixtureName: string, prefix: string) {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), prefix));
+    try {
+      const copyPath = path.join(tempDir, "repo");
+      await cp(fixturePath(fixtureName), copyPath, { recursive: true });
+      return (await analyzeRepository({ repositoryRoot: copyPath })).snapshot;
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  }
+
+  it("produces the same contentHash when the same directory is analysed twice", async () => {
+    const first = (await analyzeRepository({ repositoryRoot: fixturePath("single-package") })).snapshot;
+    const second = (await analyzeRepository({ repositoryRoot: fixturePath("single-package") })).snapshot;
+
+    expect(second.contentHash).toBe(first.contentHash);
+  });
+
+  it("produces the same contentHash for a copy in a different directory", async () => {
+    const original = (await analyzeRepository({ repositoryRoot: fixturePath("single-package") })).snapshot;
+    const copy = await analyzeInTempCopy("single-package", "archmind-repro-a-");
+
+    expect(copy.contentHash).toBe(original.contentHash);
+  });
+
+  it("keeps diagnostics repo-relative so hashes match across directories", async () => {
+    const withMissingExtends = async (prefix: string) => {
+      const tempDir = await mkdtemp(path.join(os.tmpdir(), prefix));
+      try {
+        const copyPath = path.join(tempDir, "repo");
+        await cp(fixturePath("single-package"), copyPath, { recursive: true });
+        await writeFile(
+          path.join(copyPath, "tsconfig.json"),
+          JSON.stringify({ extends: "./missing-base.json", include: ["src"] })
+        );
+        return (await analyzeRepository({ repositoryRoot: copyPath })).snapshot;
+      } finally {
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    };
+
+    const first = await withMissingExtends("archmind-repro-b-");
+    const second = await withMissingExtends("archmind-repro-c-");
+
+    expect(first.diagnostics).toEqual([
+      expect.objectContaining({
+        code: "TSCONFIG_PARSE_ERROR",
+        message: "Cannot read file 'missing-base.json'.",
+        filePath: "tsconfig.json"
+      })
+    ]);
+    expect(second.contentHash).toBe(first.contentHash);
+  });
+});
+
 describe("runCli", () => {
   it("returns non-zero for unknown commands", async () => {
     const stdout: string[] = [];

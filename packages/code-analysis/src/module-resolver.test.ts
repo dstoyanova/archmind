@@ -290,6 +290,45 @@ describe("resolveFileImports", () => {
     }
   });
 
+  it("reports missing relative extends with repo-relative text and keeps package extends separate", async () => {
+    const parent = await mkdtemp(path.join(os.tmpdir(), "archmind-extends@-"));
+    try {
+      await mkdir(path.join(parent, "src"), { recursive: true });
+      await writeFile(path.join(parent, "src/a.ts"), "export const a = 1;\n");
+      await writeFile(
+        path.join(parent, "tsconfig.json"),
+        JSON.stringify({ extends: "./missing-base.json", include: ["src"] })
+      );
+      await writeFile(
+        path.join(parent, "tsconfig.node.json"),
+        JSON.stringify({ extends: "@tsconfig/node20/tsconfig.json", include: ["src"] })
+      );
+
+      const result = await resolveFileImports({
+        repositoryRoot: parent,
+        files: [{ filePath: "src/a.ts" }],
+        imports: []
+      });
+
+      expect(result.diagnostics).toEqual([
+        {
+          severity: "error",
+          code: "TSCONFIG_PARSE_ERROR",
+          message: "Cannot read file 'missing-base.json'.",
+          filePath: "tsconfig.json"
+        },
+        {
+          severity: "warning",
+          code: "TSCONFIG_EXTENDS_UNRESOLVED_PACKAGE_SKIPPED",
+          message: "File '@tsconfig/node20/tsconfig.json' not found.",
+          filePath: "tsconfig.node.json"
+        }
+      ]);
+    } finally {
+      await rm(parent, { recursive: true, force: true });
+    }
+  });
+
   it("never resolves paths outside the repository root and tracks unresolved rate", async () => {
     const parent = await mkdtemp(path.join(os.tmpdir(), "archmind-resolve-parent-"));
     const root = path.join(parent, "repo");

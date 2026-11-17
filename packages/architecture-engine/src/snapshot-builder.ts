@@ -5,6 +5,7 @@ import {
   architectureSnapshotSchema,
   type ArchitectureSnapshotDocument
 } from "@archmind/contracts";
+import { canonicalJson, compareStrings } from "@archmind/domain";
 
 import {
   buildGraphMetricsAndCycles,
@@ -162,7 +163,7 @@ function normalizeComponents(
       return left.depth - right.depth;
     }
 
-    return left.id.localeCompare(right.id);
+    return compareStrings(left.id, right.id);
   });
   const normalized: Array<
     Omit<ArchitectureSnapshotDocument["components"][number], "metrics"> & {
@@ -243,7 +244,7 @@ function normalizeFiles(
   parseStatusByFilePath: Map<string, "read-error" | "parse-error">
 ): ArchitectureSnapshotDocument["files"] {
   return [...files]
-    .sort((left, right) => left.path.localeCompare(right.path))
+    .sort((left, right) => compareStrings(left.path, right.path))
     .map((file) => {
       const owningInputComponentId = ownershipByFilePath.get(file.path);
       if (!owningInputComponentId) {
@@ -333,7 +334,7 @@ function normalizeSymbols(
   return [...symbols]
     .sort((left, right) => {
       if (left.filePath !== right.filePath) {
-        return left.filePath.localeCompare(right.filePath);
+        return compareStrings(left.filePath, right.filePath);
       }
 
       if (left.line !== right.line) {
@@ -345,10 +346,10 @@ function normalizeSymbols(
       }
 
       if (left.name !== right.name) {
-        return left.name.localeCompare(right.name);
+        return compareStrings(left.name, right.name);
       }
 
-      return left.kind.localeCompare(right.kind);
+      return compareStrings(left.kind, right.kind);
     })
     .flatMap((symbol) => {
       const fileId = fileIdByPath.get(symbol.filePath);
@@ -383,22 +384,22 @@ function normalizeDiagnostics(
 ): SnapshotDiagnostic[] {
   return [...diagnostics].sort((left, right) => {
     if (left.severity !== right.severity) {
-      return left.severity.localeCompare(right.severity);
+      return compareStrings(left.severity, right.severity);
     }
 
     if (left.code !== right.code) {
-      return left.code.localeCompare(right.code);
+      return compareStrings(left.code, right.code);
     }
 
     if (left.filePath !== right.filePath) {
-      return (left.filePath ?? "").localeCompare(right.filePath ?? "");
+      return compareStrings(left.filePath ?? "", right.filePath ?? "");
     }
 
     if (left.line !== right.line) {
       return (left.line ?? 0) - (right.line ?? 0);
     }
 
-    return left.message.localeCompare(right.message);
+    return compareStrings(left.message, right.message);
   });
 }
 
@@ -408,7 +409,7 @@ function normalizeResolutionStats(
   const countsByResolution = Object.fromEntries(
     Object.entries(resolutionStats.countsByResolution)
       .filter((entry): entry is [string, number] => typeof entry[1] === "number")
-      .sort(([left], [right]) => left.localeCompare(right))
+      .sort(([left], [right]) => compareStrings(left, right))
   );
 
   return {
@@ -444,7 +445,7 @@ function compareImportInput(
   right: SnapshotBuilderImportInput
 ): number {
   if (left.filePath !== right.filePath) {
-    return left.filePath.localeCompare(right.filePath);
+    return compareStrings(left.filePath, right.filePath);
   }
 
   if (left.line !== right.line) {
@@ -456,10 +457,10 @@ function compareImportInput(
   }
 
   if (left.specifier !== right.specifier) {
-    return left.specifier.localeCompare(right.specifier);
+    return compareStrings(left.specifier, right.specifier);
   }
 
-  return left.kind.localeCompare(right.kind);
+  return compareStrings(left.kind, right.kind);
 }
 
 function computeContentHash(snapshot: ArchitectureSnapshotDocument): string {
@@ -478,22 +479,7 @@ function computeContentHash(snapshot: ArchitectureSnapshotDocument): string {
     resolutionStats: snapshot.resolutionStats
   };
 
-  return sha256Hex(JSON.stringify(normalizeForHash(payload)));
-}
-
-function normalizeForHash(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map((entry) => normalizeForHash(entry));
-  }
-
-  if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>).sort(
-      ([left], [right]) => left.localeCompare(right)
-    );
-    return Object.fromEntries(entries.map(([key, entry]) => [key, normalizeForHash(entry)]));
-  }
-
-  return value;
+  return sha256Hex(canonicalJson(payload));
 }
 
 function deterministicId(prefix: string, key: string): string {

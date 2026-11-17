@@ -9,7 +9,9 @@ import type {
   FileRole,
   ImportKind
 } from "./model.js";
+import { collectVisibleComponentIds, findVisibleAncestor } from "./hierarchy-projection.js";
 import { assertSnapshotInvariants } from "./invariants.js";
+import { compareStrings } from "./ordering.js";
 
 export interface ProjectGraphFilters {
   includeFileRoles?: FileRole[];
@@ -47,7 +49,6 @@ export interface ProjectedGraph {
 
 interface SnapshotIndexes {
   componentsById: Map<string, ArchitectureComponent>;
-  childrenById: Map<string, string[]>;
   parentById: Map<string, string | undefined>;
   filesById: Map<string, ArchitectureSnapshot["files"][number]>;
   importsById: Map<string, FileImport>;
@@ -73,12 +74,7 @@ export function projectGraph(
   };
 
   const indexes = buildIndexes(snapshot);
-  const visibleComponentIds = collectVisibleComponents(
-    snapshot.components,
-    indexes.childrenById,
-    depth,
-    expanded
-  );
+  const visibleComponentIds = collectVisibleComponentIds(snapshot.components, depth, expanded);
   const projectedComponents = snapshot.components
     .filter((component) => visibleComponentIds.has(component.id))
     .sort(compareComponents);
@@ -108,70 +104,18 @@ function buildIndexes(snapshot: ArchitectureSnapshot): SnapshotIndexes {
   const componentsById = new Map(
     snapshot.components.map((component) => [component.id, component] as const)
   );
-  const childrenById = new Map<string, string[]>();
   const parentById = new Map<string, string | undefined>();
 
   for (const component of snapshot.components) {
     parentById.set(component.id, component.parentId);
-    if (!component.parentId) {
-      continue;
-    }
-
-    const children = childrenById.get(component.parentId) ?? [];
-    children.push(component.id);
-    childrenById.set(component.parentId, children);
-  }
-
-  for (const children of childrenById.values()) {
-    children.sort();
   }
 
   return {
     componentsById,
-    childrenById,
     parentById,
     filesById: new Map(snapshot.files.map((file) => [file.id, file] as const)),
     importsById: new Map(snapshot.fileImports.map((item) => [item.id, item] as const))
   };
-}
-
-function collectVisibleComponents(
-  components: ArchitectureComponent[],
-  childrenById: Map<string, string[]>,
-  depth: number,
-  expanded: Set<string>
-): Set<string> {
-  const visible = new Set(
-    components.filter((component) => component.depth <= depth).map((component) => component.id)
-  );
-
-  let changed = true;
-  while (changed) {
-    changed = false;
-
-    for (const component of components) {
-      if (!visible.has(component.id)) {
-        continue;
-      }
-
-      const shouldExpand = component.depth < depth || expanded.has(component.id);
-      if (!shouldExpand) {
-        continue;
-      }
-
-      const children = childrenById.get(component.id) ?? [];
-      for (const childId of children) {
-        if (visible.has(childId)) {
-          continue;
-        }
-
-        visible.add(childId);
-        changed = true;
-      }
-    }
-  }
-
-  return visible;
 }
 
 function projectDependencies(
@@ -325,18 +269,14 @@ function mapToVisibleAncestor(
   parentById: Map<string, string | undefined>,
   visibleComponentIds: Set<string>
 ): string {
-  let currentId: string | undefined = componentId;
-  while (currentId) {
-    if (visibleComponentIds.has(currentId)) {
-      return currentId;
-    }
-
-    currentId = parentById.get(currentId);
+  const visibleId = findVisibleAncestor(componentId, parentById, visibleComponentIds);
+  if (visibleId === undefined) {
+    throw new Error(
+      `Cannot project component "${componentId}" because it has no visible ancestor.`
+    );
   }
 
-  throw new Error(
-    `Cannot project component "${componentId}" because it has no visible ancestor.`
-  );
+  return visibleId;
 }
 
 function incrementCount(
@@ -352,7 +292,7 @@ function compareComponents(a: ArchitectureComponent, b: ArchitectureComponent): 
     return a.depth - b.depth;
   }
 
-  return a.id.localeCompare(b.id);
+  return compareStrings(a.id, b.id);
 }
 
 function compareProjectedDependencies(
@@ -360,10 +300,10 @@ function compareProjectedDependencies(
   b: ProjectedDependency
 ): number {
   if (a.fromComponentId !== b.fromComponentId) {
-    return a.fromComponentId.localeCompare(b.fromComponentId);
+    return compareStrings(a.fromComponentId, b.fromComponentId);
   }
 
-  return a.toComponentId.localeCompare(b.toComponentId);
+  return compareStrings(a.toComponentId, b.toComponentId);
 }
 
 function compareProjectedExternalDependencies(
@@ -371,8 +311,8 @@ function compareProjectedExternalDependencies(
   b: ProjectedExternalDependency
 ): number {
   if (a.componentId !== b.componentId) {
-    return a.componentId.localeCompare(b.componentId);
+    return compareStrings(a.componentId, b.componentId);
   }
 
-  return a.packageName.localeCompare(b.packageName);
+  return compareStrings(a.packageName, b.packageName);
 }

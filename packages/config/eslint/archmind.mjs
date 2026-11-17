@@ -5,6 +5,7 @@ import importPlugin from "eslint-plugin-import";
 
 const internalPackages = [
   "@archmind/agent-runtime",
+  "@archmind/analysis-pipeline",
   "@archmind/architecture-engine",
   "@archmind/code-analysis",
   "@archmind/config",
@@ -120,16 +121,29 @@ const archmindConfig = [
     files: ["packages/code-analysis/**/*.{ts,tsx,mts,cts}"],
     rules: {
       "no-restricted-imports": createInternalRestrictionRule([
-        "@archmind/contracts"
-      ], "code-analysis may only depend on contracts")
+        "@archmind/contracts",
+        "@archmind/domain"
+      ], "code-analysis may only depend on contracts and domain")
     }
   },
   {
     files: ["packages/architecture-engine/**/*.{ts,tsx,mts,cts}"],
     rules: {
       "no-restricted-imports": createInternalRestrictionRule([
-        "@archmind/contracts"
-      ], "architecture-engine may only depend on contracts")
+        "@archmind/contracts",
+        "@archmind/domain"
+      ], "architecture-engine may only depend on contracts and domain")
+    }
+  },
+  {
+    files: ["packages/analysis-pipeline/**/*.{ts,tsx,mts,cts}"],
+    rules: {
+      "no-restricted-imports": createInternalRestrictionRule([
+        "@archmind/architecture-engine",
+        "@archmind/code-analysis",
+        "@archmind/contracts",
+        "@archmind/domain"
+      ], "analysis-pipeline may only depend on the engines, contracts and domain")
     }
   },
   {

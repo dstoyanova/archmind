@@ -30,3 +30,6 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      - name: Analyze fixture with the CLI
+        run: pnpm archmind analyze apps/cli/fixtures/single-package --out "$RUNNER_TEMP/snapshot.json" --format summary

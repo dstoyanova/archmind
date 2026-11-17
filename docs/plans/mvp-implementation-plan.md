@@ -175,6 +175,7 @@ The **M** column gives the milestone in which each requirement is delivered.
 | `packages/contracts`           | zod schemas for external contracts: snapshot and evaluation documents, `archmind.config.json`, and API request/response models. | M1 |
 | `packages/code-analysis`       | `SourceProvider` port and local source provider, file discovery and roles, parsing, import and symbol extraction, module resolution. | M1 |
 | `packages/architecture-engine` | Component hierarchy mapping, dependency aggregation, metrics, snapshot building and hashing. | M1 |
+| `packages/analysis-pipeline`   | `analyzeRepository`: composes `code-analysis` and `architecture-engine` into one local analysis run. Reused by the CLI and the M4 worker. | M1 |
 | `packages/governance-engine`   | Rule semantics, rule evaluation, finding fingerprints. | M3 |
 | `packages/database`            | Prisma schema, migrations, repositories and `SnapshotDocumentStore`. | M4 |
 | `packages/observability`       | Logger with redaction and correlation IDs (M4). Metrics and error reporting (M7). | M4 |
@@ -196,7 +197,7 @@ database ────────────┤
 observability ───────┘ (depends on nothing internal)
 ```
 
-- The engines (`code-analysis`, `architecture-engine`, `governance-engine`) are independent of each other. Apps compose them.
+- The engines (`code-analysis`, `architecture-engine`, `governance-engine`) are independent of each other and may depend on `contracts` and `domain`. Apps and `analysis-pipeline` compose them.
 - No package depends on an app. Packages never import each other's internals.
 - **Config schema ownership:** `contracts` owns the `archmind.config.json` schema, because it is an external, versioned contract.
   - `code-analysis` and `architecture-engine` consume the analysis section (`components`, `componentRoots`, `fileRoles`).

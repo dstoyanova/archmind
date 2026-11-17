@@ -1,9 +1,13 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { compareStrings } from "@archmind/domain";
 import ts from "typescript";
 
 import type { DiscoveredSourceFile } from "./source-provider.js";
+
+/** Version of the TypeScript parser used for extraction; recorded on every snapshot. */
+export const PARSER_VERSION: string = ts.version;
 
 export interface ExtractedFileImport {
   filePath: string;
@@ -54,10 +58,14 @@ export async function extractImportsAndSymbols(
     try {
       sourceText = await readFile(absoluteFilePath, "utf8");
     } catch (error) {
+      const errorCode = (error as { code?: unknown }).code;
       diagnostics.push({
         severity: "error",
         code: "SOURCE_FILE_READ_FAILED",
-        message: `Failed reading "${file.path}": ${toErrorMessage(error)}`,
+        message:
+          typeof errorCode === "string"
+            ? `Failed reading "${file.path}" (${errorCode}).`
+            : `Failed reading "${file.path}".`,
         filePath: file.path
       });
       continue;
@@ -351,7 +359,7 @@ function compareByLocationThenSpecifier(
   right: ExtractedFileImport
 ): number {
   if (left.filePath !== right.filePath) {
-    return left.filePath.localeCompare(right.filePath);
+    return compareStrings(left.filePath, right.filePath);
   }
 
   if (left.line !== right.line) {
@@ -363,15 +371,15 @@ function compareByLocationThenSpecifier(
   }
 
   if (left.specifier !== right.specifier) {
-    return left.specifier.localeCompare(right.specifier);
+    return compareStrings(left.specifier, right.specifier);
   }
 
-  return left.kind.localeCompare(right.kind);
+  return compareStrings(left.kind, right.kind);
 }
 
 function compareSymbols(left: ExtractedSymbol, right: ExtractedSymbol): number {
   if (left.filePath !== right.filePath) {
-    return left.filePath.localeCompare(right.filePath);
+    return compareStrings(left.filePath, right.filePath);
   }
 
   if (left.line !== right.line) {
@@ -383,16 +391,8 @@ function compareSymbols(left: ExtractedSymbol, right: ExtractedSymbol): number {
   }
 
   if (left.name !== right.name) {
-    return left.name.localeCompare(right.name);
+    return compareStrings(left.name, right.name);
   }
 
-  return left.kind.localeCompare(right.kind);
-}
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return String(error);
+  return compareStrings(left.kind, right.kind);
 }

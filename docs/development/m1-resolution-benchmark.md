@@ -15,10 +15,10 @@ This document records M1 benchmark evidence for:
 
 ## How to reproduce
 
-1. Build the CLI app:
+1. Install dependencies (no separate build step is needed):
 
    ```bash
-   pnpm --filter @archmind/cli build
+   pnpm install
    ```
 
 2. Generate reference edges (example):
@@ -30,13 +30,13 @@ This document records M1 benchmark evidence for:
 3. Run the benchmark:
 
    ```bash
-   pnpm dlx tsx apps/cli/src/main.ts resolution-benchmark --config /path/to/resolution-benchmark.config.json
+   pnpm archmind resolution-benchmark --config /path/to/resolution-benchmark.config.json
    ```
 
 4. For NFR-7, measure a large repository run:
 
    ```bash
-   /usr/bin/time -p pnpm dlx tsx apps/cli/src/main.ts analyze /path/to/large-repo --out /tmp/large.snapshot.json --format summary
+   /usr/bin/time -p pnpm archmind analyze /path/to/large-repo --out /tmp/large.snapshot.json --format summary
    ```
 
 ## Results

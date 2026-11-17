@@ -1,6 +1,12 @@
 import type {
   ArchitectureSnapshotDocument
 } from "@archmind/contracts";
+import {
+  compareStrings,
+  findCycles,
+  projectEdgesToDepth,
+  type ProjectedHierarchyEdge
+} from "@archmind/domain";
 
 type SnapshotComponent = ArchitectureSnapshotDocument["components"][number];
 type SnapshotFile = ArchitectureSnapshotDocument["files"][number];
@@ -32,9 +38,17 @@ interface ComponentEdgeEvidence {
   kind: ImportKind;
 }
 
-interface TarjanGraph {
-  nodes: string[];
-  edges: Array<{ from: string; to: string; typeOnly: boolean }>;
+interface ProductionComponentEdge {
+  fromComponentId: string;
+  toComponentId: string;
+  importId: string;
+  typeOnly: boolean;
+}
+
+interface FileEdge {
+  from: string;
+  to: string;
+  typeOnly: boolean;
 }
 
 export function buildGraphMetricsAndCycles(
@@ -42,20 +56,13 @@ export function buildGraphMetricsAndCycles(
 ): BuildGraphMetricsAndCyclesResult {
   const components = [...input.components].sort(compareGraphComponentsById);
   const componentById = new Map(components.map((component) => [component.id, component] as const));
-  const parentById = new Map(components.map((component) => [component.id, component.parentId] as const));
   const fileById = new Map(input.files.map((file) => [file.id, file] as const));
   const fileIdsByPath = new Map(input.files.map((file) => [file.path, file.id] as const));
   const childrenById = buildChildrenById(components);
-  const ancestorByDepth = buildAncestorByDepth(components, parentById);
 
   const dependencyEvidenceByEdge = new Map<string, ComponentEdgeEvidence[]>();
-  const productionComponentEdges: Array<{
-    fromComponentId: string;
-    toComponentId: string;
-    importId: string;
-    typeOnly: boolean;
-  }> = [];
-  const productionFileEdges: Array<{ fromFileId: string; toFileId: string; typeOnly: boolean }> = [];
+  const productionComponentEdges: ProductionComponentEdge[] = [];
+  const productionFileEdges: FileEdge[] = [];
   const externalDependencyEvidence = new Map<string, Map<FileRole, number>>();
 
   for (const fileImport of input.fileImports) {
@@ -108,8 +115,8 @@ export function buildGraphMetricsAndCycles(
 
     if (toFile && toFile.role === "source") {
       productionFileEdges.push({
-        fromFileId: fromFile.id,
-        toFileId: toFile.id,
+        from: fromFile.id,
+        to: toFile.id,
         typeOnly: isTypeOnly
       });
     }
@@ -145,7 +152,7 @@ export function buildGraphMetricsAndCycles(
       const countsByRole: Partial<Record<FileRole, number>> = {};
       let weight = 0;
       for (const [role, count] of [...countsByRoleMap.entries()].sort((left, right) =>
-        left[0].localeCompare(right[0])
+        compareStrings(left[0], right[0])
       )) {
         countsByRole[role] = count;
         weight += count;
@@ -164,7 +171,6 @@ export function buildGraphMetricsAndCycles(
     components,
     input.files,
     childrenById,
-    ancestorByDepth,
     productionComponentEdges
   );
 
@@ -180,7 +186,7 @@ export function buildGraphMetricsAndCycles(
   }));
 
   const cycles = [
-    ...buildDepthCycles(components, ancestorByDepth, productionComponentEdges),
+    ...buildDepthCycles(components, productionComponentEdges),
     ...buildFileCycles(input.files, productionFileEdges)
   ];
 
@@ -196,11 +202,7 @@ function buildComponentMetrics(
   components: GraphComponentInput[],
   files: SnapshotFile[],
   childrenById: Map<string, string[]>,
-  ancestorByDepth: Map<string, Map<number, string>>,
-  productionComponentEdges: Array<{
-    fromComponentId: string;
-    toComponentId: string;
-  }>
+  productionComponentEdges: ProductionComponentEdge[]
 ): Map<string, SnapshotComponent["metrics"]> {
   const fileCountByComponent = new Map<string, number>();
   const locByComponent = new Map<string, number>();
@@ -222,9 +224,15 @@ function buildComponentMetrics(
     }
   }
 
+  const projectedEdgesByDepth = new Map<number, ProjectedHierarchyEdge[]>();
   const metricsByComponent = new Map<string, SnapshotComponent["metrics"]>();
   for (const component of components) {
-    const projectedEdges = projectEdgesAtDepth(component.depth, ancestorByDepth, productionComponentEdges);
+    let projectedEdges = projectedEdgesByDepth.get(component.depth);
+    if (!projectedEdges) {
+      projectedEdges = projectEdgesToDepth(components, productionComponentEdges, component.depth);
+      projectedEdgesByDepth.set(component.depth, projectedEdges);
+    }
+
     const outgoing = new Set<string>();
     const incoming = new Set<string>();
 
@@ -255,12 +263,7 @@ function buildComponentMetrics(
 
 function buildDepthCycles(
   components: GraphComponentInput[],
-  ancestorByDepth: Map<string, Map<number, string>>,
-  productionComponentEdges: Array<{
-    fromComponentId: string;
-    toComponentId: string;
-    typeOnly: boolean;
-  }>
+  productionComponentEdges: ProductionComponentEdge[]
 ): SnapshotCycle[] {
   const cycles: SnapshotCycle[] = [];
   const depths = [...new Set(components.map((component) => component.depth))].sort((a, b) => a - b);
@@ -269,29 +272,14 @@ function buildDepthCycles(
     const nodes = components
       .filter((component) => component.depth <= depth)
       .map((component) => component.id)
-      .sort();
+      .sort(compareStrings);
+    const edges = projectEdgesToDepth(components, productionComponentEdges, depth);
 
-    const fullEdges = projectEdgesAtDepth(depth, ancestorByDepth, productionComponentEdges, true);
-    const runtimeEdges = fullEdges.filter((edge) => !edge.typeOnly);
-    const graph: TarjanGraph = {
-      nodes,
-      edges: fullEdges.map((edge) => ({ from: edge.from, to: edge.to, typeOnly: edge.typeOnly }))
-    };
-
-    const stronglyConnected = findStronglyConnectedComponents(graph);
-    for (const members of stronglyConnected) {
-      const cycleMembers = [...members].sort();
-      const typeOnly = !hasCycle({
-        nodes: cycleMembers,
-        edges: runtimeEdges
-          .filter((edge) => cycleMembers.includes(edge.from) && cycleMembers.includes(edge.to))
-          .map((edge) => ({ from: edge.from, to: edge.to, typeOnly: false }))
-      });
-
+    for (const members of findCycles({ nodes, edges })) {
       cycles.push({
         level: { kind: "depth", depth },
-        memberIds: cycleMembers,
-        typeOnly
+        memberIds: members,
+        typeOnly: !hasRuntimeCycle(members, edges)
       });
     }
   }
@@ -299,182 +287,35 @@ function buildDepthCycles(
   return cycles.sort(compareCycles);
 }
 
-function buildFileCycles(
-  files: SnapshotFile[],
-  productionFileEdges: Array<{ fromFileId: string; toFileId: string; typeOnly: boolean }>
-): SnapshotCycle[] {
-  const sourceFileIds = files
+function buildFileCycles(files: SnapshotFile[], fileEdges: FileEdge[]): SnapshotCycle[] {
+  const nodes = files
     .filter((file) => file.role === "source")
     .map((file) => file.id)
-    .sort();
-  const graph: TarjanGraph = {
-    nodes: sourceFileIds,
-    edges: productionFileEdges.map((edge) => ({
-      from: edge.fromFileId,
-      to: edge.toFileId,
-      typeOnly: edge.typeOnly
-    }))
-  };
+    .sort(compareStrings);
 
-  const cycles = findStronglyConnectedComponents(graph).map((members) => {
-    const cycleMembers = [...members].sort();
-    const runtimeEdges = graph.edges.filter(
-      (edge) => !edge.typeOnly && cycleMembers.includes(edge.from) && cycleMembers.includes(edge.to)
-    );
-    const typeOnly = !hasCycle({
-      nodes: cycleMembers,
-      edges: runtimeEdges
-    });
-
-    return {
-      level: { kind: "file" } as const,
-      memberIds: cycleMembers,
-      typeOnly
-    } satisfies SnapshotCycle;
-  });
-
-  return cycles.sort(compareCycles);
+  return findCycles({ nodes, edges: fileEdges })
+    .map(
+      (members) =>
+        ({
+          level: { kind: "file" },
+          memberIds: members,
+          typeOnly: !hasRuntimeCycle(members, fileEdges)
+        }) satisfies SnapshotCycle
+    )
+    .sort(compareCycles);
 }
 
-function projectEdgesAtDepth(
-  depth: number,
-  ancestorByDepth: Map<string, Map<number, string>>,
-  edges: Array<{
-    fromComponentId: string;
-    toComponentId: string;
-    typeOnly?: boolean;
-  }>,
-  includeTypeOnlyMarker = false
-): Array<{ from: string; to: string; typeOnly: boolean }> {
-  const projected = new Map<string, { from: string; to: string; typeOnly: boolean }>();
-
-  for (const edge of edges) {
-    const from = ancestorByDepth.get(edge.fromComponentId)?.get(depth);
-    const to = ancestorByDepth.get(edge.toComponentId)?.get(depth);
-    if (!from || !to || from === to) {
-      continue;
-    }
-
-    const key = `${from}→${to}`;
-    const existing = projected.get(key);
-    if (!existing) {
-      projected.set(key, {
-        from,
-        to,
-        typeOnly: includeTypeOnlyMarker ? edge.typeOnly === true : false
-      });
-      continue;
-    }
-
-    if (includeTypeOnlyMarker && edge.typeOnly !== true) {
-      existing.typeOnly = false;
-    }
-  }
-
-  return [...projected.values()].sort((left, right) =>
-    compareEdges(left.from, left.to, right.from, right.to)
+/** A cycle is runtime when its members still form a cycle using only non-type-only edges. */
+function hasRuntimeCycle(
+  members: readonly string[],
+  edges: ReadonlyArray<{ from: string; to: string; typeOnly: boolean }>
+): boolean {
+  const memberSet = new Set(members);
+  const runtimeEdges = edges.filter(
+    (edge) => !edge.typeOnly && memberSet.has(edge.from) && memberSet.has(edge.to)
   );
-}
 
-function findStronglyConnectedComponents(graph: TarjanGraph): string[][] {
-  const adjacency = buildAdjacency(graph.nodes, graph.edges.map((edge) => ({ from: edge.from, to: edge.to })));
-  const indexByNode = new Map<string, number>();
-  const lowLinkByNode = new Map<string, number>();
-  const onStack = new Set<string>();
-  const stack: string[] = [];
-  const stronglyConnected: string[][] = [];
-  let index = 0;
-
-  const strongConnect = (node: string): void => {
-    indexByNode.set(node, index);
-    lowLinkByNode.set(node, index);
-    index += 1;
-    stack.push(node);
-    onStack.add(node);
-
-    const neighbors = adjacency.get(node) ?? [];
-    for (const neighbor of neighbors) {
-      if (!indexByNode.has(neighbor)) {
-        strongConnect(neighbor);
-        lowLinkByNode.set(
-          node,
-          Math.min(lowLinkByNode.get(node) ?? Number.POSITIVE_INFINITY, lowLinkByNode.get(neighbor) ?? Number.POSITIVE_INFINITY)
-        );
-        continue;
-      }
-
-      if (onStack.has(neighbor)) {
-        lowLinkByNode.set(
-          node,
-          Math.min(lowLinkByNode.get(node) ?? Number.POSITIVE_INFINITY, indexByNode.get(neighbor) ?? Number.POSITIVE_INFINITY)
-        );
-      }
-    }
-
-    if (lowLinkByNode.get(node) !== indexByNode.get(node)) {
-      return;
-    }
-
-    const component: string[] = [];
-    while (stack.length > 0) {
-      const current = stack.pop();
-      if (!current) {
-        break;
-      }
-
-      onStack.delete(current);
-      component.push(current);
-      if (current === node) {
-        break;
-      }
-    }
-
-    const componentSet = new Set(component);
-    const isCycle =
-      component.length > 1 ||
-      component.some((member) =>
-        (adjacency.get(member) ?? []).some((neighbor) => componentSet.has(neighbor))
-      );
-
-    if (isCycle) {
-      stronglyConnected.push(component);
-    }
-  };
-
-  for (const node of graph.nodes) {
-    if (!indexByNode.has(node)) {
-      strongConnect(node);
-    }
-  }
-
-  return stronglyConnected;
-}
-
-function hasCycle(graph: TarjanGraph): boolean {
-  return findStronglyConnectedComponents(graph).length > 0;
-}
-
-function buildAdjacency(
-  nodes: string[],
-  edges: Array<{ from: string; to: string }>
-): Map<string, string[]> {
-  const adjacency = new Map<string, string[]>(
-    nodes.map((node) => [node, [] as string[]])
-  );
-  for (const edge of edges) {
-    const neighbors = adjacency.get(edge.from);
-    if (!neighbors) {
-      continue;
-    }
-
-    neighbors.push(edge.to);
-  }
-
-  for (const [node, neighbors] of adjacency.entries()) {
-    adjacency.set(node, [...new Set(neighbors)].sort());
-  }
-
-  return adjacency;
+  return findCycles({ nodes: members, edges: runtimeEdges }).length > 0;
 }
 
 function buildChildrenById(components: GraphComponentInput[]): Map<string, string[]> {
@@ -494,34 +335,6 @@ function buildChildrenById(components: GraphComponentInput[]): Map<string, strin
   }
 
   return childrenById;
-}
-
-function buildAncestorByDepth(
-  components: GraphComponentInput[],
-  parentById: Map<string, string | undefined>
-): Map<string, Map<number, string>> {
-  const byDepth = new Map<string, Map<number, string>>();
-
-  for (const component of components) {
-    const mapping = new Map<number, string>();
-    let currentId: string | undefined = component.id;
-    let currentDepth = component.depth;
-
-    while (currentId !== undefined) {
-      mapping.set(currentDepth, currentId);
-
-      currentId = parentById.get(currentId);
-      if (currentId === undefined) {
-        break;
-      }
-
-      currentDepth -= 1;
-    }
-
-    byDepth.set(component.id, mapping);
-  }
-
-  return byDepth;
 }
 
 function resolveImportToFileId(
@@ -557,7 +370,7 @@ function compareGraphComponentsById(
   left: GraphComponentInput,
   right: GraphComponentInput
 ): number {
-  return left.id.localeCompare(right.id);
+  return compareStrings(left.id, right.id);
 }
 
 function compareEdges(
@@ -567,20 +380,20 @@ function compareEdges(
   rightTo: string
 ): number {
   if (leftFrom !== rightFrom) {
-    return leftFrom.localeCompare(rightFrom);
+    return compareStrings(leftFrom, rightFrom);
   }
 
-  return leftTo.localeCompare(rightTo);
+  return compareStrings(leftTo, rightTo);
 }
 
 function compareCycles(left: SnapshotCycle, right: SnapshotCycle): number {
   if (left.level.kind !== right.level.kind) {
-    return left.level.kind.localeCompare(right.level.kind);
+    return compareStrings(left.level.kind, right.level.kind);
   }
 
   if (left.level.kind === "depth" && right.level.kind === "depth" && left.level.depth !== right.level.depth) {
     return left.level.depth - right.level.depth;
   }
 
-  return left.memberIds.join("|").localeCompare(right.memberIds.join("|"));
+  return compareStrings(left.memberIds.join("|"), right.memberIds.join("|"));
 }

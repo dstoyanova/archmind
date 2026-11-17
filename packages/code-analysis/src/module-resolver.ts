@@ -1,23 +1,22 @@
 import { builtinModules } from "node:module";
-import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
-import { minimatch } from "minimatch";
+import { compareStrings } from "@archmind/domain";
 import ts from "typescript";
 
 import type { ExtractedFileImport } from "./import-symbol-extractor.js";
+import { discoverRepositoryFiles } from "./repository-files.js";
+import {
+  discoverWorkspace,
+  type PackageManifest,
+  type WorkspaceDiscoveryResult
+} from "./workspace-discovery.js";
 
 const SOURCE_EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 const COMPILED_EXTENSIONS = [".d.ts", ".d.mts", ".d.cts", ".js", ".jsx", ".mjs", ".cjs"];
-const EXCLUDED_DIRECTORY_NAMES = new Set([
-  ".git",
-  "node_modules",
-  "dist",
-  "build",
-  "out",
-  "coverage",
-  ".next"
-]);
+// TypeScript diagnostic codes: "No inputs were found in config file" and "File '{0}' not found".
+const TS_NO_INPUTS_FOUND = 18003;
+const TS_FILE_NOT_FOUND = 6053;
 
 const NODE_BUILT_INS = new Set(
   builtinModules.flatMap((moduleName) => [moduleName, `node:${moduleName}`])
@@ -54,6 +53,11 @@ export interface ResolveFileImportsInput {
   repositoryRoot: string;
   files: Array<Pick<ResolvedFileImport, "filePath">>;
   imports: ExtractedFileImport[];
+  /**
+   * Workspace discovery result to reuse. When omitted the resolver discovers the
+   * workspace itself and reports its diagnostics; when provided, the caller owns them.
+   */
+  workspace?: WorkspaceDiscoveryResult | undefined;
 }
 
 export interface ResolveFileImportsResult {
@@ -78,16 +82,6 @@ interface WorkspacePackage {
   outDir?: string | undefined;
 }
 
-interface PackageManifest {
-  name?: string | undefined;
-  exports?: unknown;
-  main?: string | undefined;
-  module?: string | undefined;
-  types?: string | undefined;
-  source?: string | undefined;
-  workspaces?: string[] | { packages?: string[] | undefined } | undefined;
-}
-
 interface ResolutionContext {
   repositoryRoot: string;
   repositoryFiles: Set<string>;
@@ -102,12 +96,18 @@ export async function resolveFileImports(
   const diagnostics: ModuleResolutionDiagnostic[] = [];
   const repositoryFiles = await discoverRepositoryFiles(repositoryRoot);
   const parseHost = createRestrictedParseConfigHost(repositoryRoot, repositoryFiles);
-  const tsConfigs = await parseTsConfigs(repositoryRoot, repositoryFiles, parseHost, diagnostics);
+  const tsConfigs = parseTsConfigs(repositoryRoot, repositoryFiles, parseHost, diagnostics);
   const tsConfigByDirectory = new Map(
     tsConfigs.map((config) => [config.directory, config] as const)
   );
-  const workspacePackages = await discoverWorkspacePackages(
+  const workspace = input.workspace ?? (await discoverWorkspace(repositoryRoot, repositoryFiles));
+  if (!input.workspace) {
+    diagnostics.push(...workspace.diagnostics);
+  }
+
+  const workspacePackages = resolveWorkspacePackages(
     repositoryRoot,
+    workspace,
     repositoryFiles,
     parseHost,
     diagnostics
@@ -145,198 +145,85 @@ export async function resolveFileImports(
   };
 }
 
-async function discoverRepositoryFiles(repositoryRoot: string): Promise<Set<string>> {
-  const discovered = new Set<string>();
-
-  const visit = async (directory: string): Promise<void> => {
-    const entries = await readdir(directory, { withFileTypes: true });
-    entries.sort((left, right) => left.name.localeCompare(right.name));
-
-    for (const entry of entries) {
-      const absolutePath = path.join(directory, entry.name);
-      const relativePath = toPosixPath(path.relative(repositoryRoot, absolutePath));
-      if (!relativePath) {
-        continue;
-      }
-
-      if (entry.isSymbolicLink()) {
-        continue;
-      }
-
-      if (entry.isDirectory()) {
-        if (EXCLUDED_DIRECTORY_NAMES.has(entry.name)) {
-          continue;
-        }
-
-        await visit(absolutePath);
-        continue;
-      }
-
-      if (entry.isFile()) {
-        discovered.add(relativePath);
-      }
-    }
-  };
-
-  await visit(repositoryRoot);
-  return discovered;
-}
-
-async function parseTsConfigs(
+function parseTsConfigs(
   repositoryRoot: string,
   repositoryFiles: Set<string>,
   parseHost: ts.ParseConfigHost,
   diagnostics: ModuleResolutionDiagnostic[]
-): Promise<ParsedTsConfig[]> {
+): ParsedTsConfig[] {
   const tsConfigPaths = [...repositoryFiles]
     .filter(
       (filePath) =>
         path.posix.basename(filePath).startsWith("tsconfig") && filePath.endsWith(".json")
     )
-    .sort();
+    .sort(compareStrings);
   const parsedConfigs: ParsedTsConfig[] = [];
 
   for (const tsConfigPath of tsConfigPaths) {
-    const absolutePath = path.join(repositoryRoot, tsConfigPath);
-    const configFile = ts.readConfigFile(absolutePath, parseHost.readFile);
-    if (configFile.error) {
-      diagnostics.push(toTsConfigDiagnostic(configFile.error, tsConfigPath));
-      continue;
+    const parsedConfig = parseTsConfigFile(repositoryRoot, tsConfigPath, parseHost, diagnostics);
+    if (parsedConfig) {
+      parsedConfigs.push(parsedConfig);
     }
-
-    const parsed = ts.parseJsonConfigFileContent(
-      configFile.config,
-      parseHost,
-      path.dirname(absolutePath),
-      undefined,
-      absolutePath
-    );
-
-    for (const parseDiagnostic of parsed.errors) {
-      if (parseDiagnostic.code === 18003) {
-        continue;
-      }
-
-      if (isUnresolvedPackageExtendsDiagnostic(parseDiagnostic.messageText)) {
-        diagnostics.push({
-          severity: "warning",
-          code: "TSCONFIG_EXTENDS_UNRESOLVED_PACKAGE_SKIPPED",
-          message: ts.flattenDiagnosticMessageText(parseDiagnostic.messageText, "\n"),
-          filePath: tsConfigPath
-        });
-        continue;
-      }
-
-      diagnostics.push(toTsConfigDiagnostic(parseDiagnostic, tsConfigPath));
-    }
-
-    parsedConfigs.push({
-      path: tsConfigPath,
-      directory: toPosixPath(path.posix.dirname(tsConfigPath)),
-      options: parsed.options,
-      fileNames: new Set(
-        parsed.fileNames
-          .map((fileName) => toRepositoryRelativePath(repositoryRoot, fileName))
-          .filter((fileName): fileName is string => Boolean(fileName))
-      ),
-      pathAliasPatterns: Object.keys(parsed.options.paths ?? {})
-    });
   }
 
-  parsedConfigs.sort((left, right) => left.path.localeCompare(right.path));
+  parsedConfigs.sort((left, right) => compareStrings(left.path, right.path));
   return parsedConfigs;
 }
 
-async function discoverWorkspacePackages(
+function resolveWorkspacePackages(
   repositoryRoot: string,
+  workspace: WorkspaceDiscoveryResult,
   repositoryFiles: Set<string>,
   parseHost: ts.ParseConfigHost,
   diagnostics: ModuleResolutionDiagnostic[]
-): Promise<WorkspacePackage[]> {
-  const rootManifest = await readManifestIfPresent(repositoryRoot, "package.json");
-  const workspacePatterns = new Set<string>();
-
-  for (const pattern of readRootWorkspacePatterns(rootManifest)) {
-    workspacePatterns.add(pattern);
-  }
-
-  if (repositoryFiles.has("pnpm-workspace.yaml")) {
-    const workspaceYaml = await readTextFile(repositoryRoot, "pnpm-workspace.yaml");
-    if (workspaceYaml !== null) {
-      for (const pattern of parsePnpmWorkspacePatterns(workspaceYaml)) {
-        workspacePatterns.add(pattern);
-      }
-    }
-  }
-
-  const packageDirs = [...repositoryFiles]
-    .filter((filePath) => path.posix.basename(filePath) === "package.json")
-    .map((filePath) => toPosixPath(path.posix.dirname(filePath)))
-    .sort();
-
-  const selectedPackageDirs =
-    workspacePatterns.size === 0
-      ? packageDirs
-      : packageDirs.filter((directory) => {
-          if (directory === ".") {
-            return true;
-          }
-
-          return [...workspacePatterns].some((pattern) =>
-            minimatch(directory, pattern, { dot: true })
-          );
-        });
-
+): WorkspacePackage[] {
   const packages: WorkspacePackage[] = [];
-  for (const packageDirectory of selectedPackageDirs) {
-    const manifestPath =
-      packageDirectory === "." ? "package.json" : `${packageDirectory}/package.json`;
-    const manifest = await readManifestIfPresent(repositoryRoot, manifestPath);
-    if (!manifest?.name) {
+  for (const { directory, manifest } of workspace.packages) {
+    if (!manifest.name) {
       continue;
     }
 
-    const tsConfig = await parsePackageTsConfig(
-      repositoryRoot,
-      packageDirectory,
-      repositoryFiles,
-      parseHost,
-      diagnostics
-    );
+    const tsConfig = findPackageTsConfig(directory, repositoryFiles);
+    const parsedTsConfig = tsConfig
+      ? parseTsConfigFile(repositoryRoot, tsConfig, parseHost, diagnostics)
+      : null;
 
     packages.push({
       name: manifest.name,
-      directory: packageDirectory,
+      directory,
       manifest,
-      rootDir: tsConfig?.options.rootDir ? toPosixPath(tsConfig.options.rootDir) : undefined,
-      outDir: tsConfig?.options.outDir ? toPosixPath(tsConfig.options.outDir) : undefined
+      rootDir: parsedTsConfig?.options.rootDir
+        ? toPosixPath(parsedTsConfig.options.rootDir)
+        : undefined,
+      outDir: parsedTsConfig?.options.outDir ? toPosixPath(parsedTsConfig.options.outDir) : undefined
     });
   }
 
-  packages.sort((left, right) => left.name.localeCompare(right.name));
+  packages.sort((left, right) => compareStrings(left.name, right.name));
   return packages;
 }
 
-async function parsePackageTsConfig(
-  repositoryRoot: string,
+function findPackageTsConfig(
   packageDirectory: string,
-  repositoryFiles: Set<string>,
-  parseHost: ts.ParseConfigHost,
-  diagnostics: ModuleResolutionDiagnostic[]
-): Promise<ParsedTsConfig | null> {
-  const candidateTsConfigPaths =
+  repositoryFiles: Set<string>
+): string | undefined {
+  const candidates =
     packageDirectory === "."
       ? ["tsconfig.json"]
       : [`${packageDirectory}/tsconfig.json`, `${packageDirectory}/tsconfig.build.json`];
-  const tsConfigPath = candidateTsConfigPaths.find((candidate) => repositoryFiles.has(candidate));
-  if (!tsConfigPath) {
-    return null;
-  }
+  return candidates.find((candidate) => repositoryFiles.has(candidate));
+}
 
+function parseTsConfigFile(
+  repositoryRoot: string,
+  tsConfigPath: string,
+  parseHost: ts.ParseConfigHost,
+  diagnostics: ModuleResolutionDiagnostic[]
+): ParsedTsConfig | null {
   const absolutePath = path.join(repositoryRoot, tsConfigPath);
   const configFile = ts.readConfigFile(absolutePath, parseHost.readFile);
   if (configFile.error) {
-    diagnostics.push(toTsConfigDiagnostic(configFile.error, tsConfigPath));
+    diagnostics.push(toTsConfigDiagnostic(configFile.error, tsConfigPath, repositoryRoot));
     return null;
   }
 
@@ -348,22 +235,23 @@ async function parsePackageTsConfig(
     absolutePath
   );
 
+  const bareExtends = readBareExtendsSpecifiers(configFile.config);
   for (const parseDiagnostic of parsed.errors) {
-    if (parseDiagnostic.code === 18003) {
+    if (parseDiagnostic.code === TS_NO_INPUTS_FOUND) {
       continue;
     }
 
-    if (isUnresolvedPackageExtendsDiagnostic(parseDiagnostic.messageText)) {
+    const diagnostic = toTsConfigDiagnostic(parseDiagnostic, tsConfigPath, repositoryRoot);
+    if (isUnresolvedPackageExtends(parseDiagnostic, diagnostic.message, bareExtends)) {
       diagnostics.push({
+        ...diagnostic,
         severity: "warning",
-        code: "TSCONFIG_EXTENDS_UNRESOLVED_PACKAGE_SKIPPED",
-        message: ts.flattenDiagnosticMessageText(parseDiagnostic.messageText, "\n"),
-        filePath: tsConfigPath
+        code: "TSCONFIG_EXTENDS_UNRESOLVED_PACKAGE_SKIPPED"
       });
       continue;
     }
 
-    diagnostics.push(toTsConfigDiagnostic(parseDiagnostic, tsConfigPath));
+    diagnostics.push(diagnostic);
   }
 
   return {
@@ -812,7 +700,7 @@ function createRestrictedParseConfigHost(
           return extensionSet.has(path.posix.extname(filePath));
         })
         .map((filePath) => path.join(repositoryRoot, filePath))
-        .sort((left, right) => toCanonicalPath(left).localeCompare(toCanonicalPath(right)));
+        .sort((left, right) => compareStrings(toCanonicalPath(left), toCanonicalPath(right)));
 
       return filePaths;
     },
@@ -889,94 +777,6 @@ function createRestrictedModuleResolutionHost(
       return path.join(repositoryRoot, relativePath);
     }
   };
-}
-
-async function readManifestIfPresent(
-  repositoryRoot: string,
-  relativePath: string
-): Promise<PackageManifest | null> {
-  const content = await readTextFile(repositoryRoot, relativePath);
-  if (content === null) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(content) as PackageManifest;
-  } catch {
-    return null;
-  }
-}
-
-async function readTextFile(
-  repositoryRoot: string,
-  relativePath: string
-): Promise<string | null> {
-  const absolutePath = path.join(repositoryRoot, relativePath);
-  if (!isInsideRepositoryRoot(repositoryRoot, absolutePath)) {
-    return null;
-  }
-
-  try {
-    const metadata = await stat(absolutePath);
-    if (!metadata.isFile()) {
-      return null;
-    }
-  } catch {
-    return null;
-  }
-
-  try {
-    return await readFile(absolutePath, "utf8");
-  } catch {
-    return null;
-  }
-}
-
-function readRootWorkspacePatterns(rootManifest: PackageManifest | null): string[] {
-  if (!rootManifest?.workspaces) {
-    return [];
-  }
-
-  if (Array.isArray(rootManifest.workspaces)) {
-    return rootManifest.workspaces;
-  }
-
-  if (Array.isArray(rootManifest.workspaces.packages)) {
-    return rootManifest.workspaces.packages;
-  }
-
-  return [];
-}
-
-function parsePnpmWorkspacePatterns(content: string): string[] {
-  const patterns: string[] = [];
-  let insidePackages = false;
-
-  for (const rawLine of content.split(/\r?\n/u)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) {
-      continue;
-    }
-
-    if (line === "packages:") {
-      insidePackages = true;
-      continue;
-    }
-
-    if (insidePackages) {
-      if (!line.startsWith("-")) {
-        break;
-      }
-
-      const rawPattern = line.replace(/^-+\s*/u, "").trim();
-      const pattern = rawPattern.replace(/^['"]|['"]$/gu, "");
-      if (pattern) {
-        patterns.push(pattern);
-      }
-    }
-  }
-
-  return patterns;
 }
 
 function resolveToKnownSourceFile(
@@ -1107,7 +907,7 @@ function toPathSegments(directory: string): string[] {
 
 function compareResolvedImports(left: ResolvedFileImport, right: ResolvedFileImport): number {
   if (left.filePath !== right.filePath) {
-    return left.filePath.localeCompare(right.filePath);
+    return compareStrings(left.filePath, right.filePath);
   }
 
   if (left.line !== right.line) {
@@ -1119,10 +919,10 @@ function compareResolvedImports(left: ResolvedFileImport, right: ResolvedFileImp
   }
 
   if (left.specifier !== right.specifier) {
-    return left.specifier.localeCompare(right.specifier);
+    return compareStrings(left.specifier, right.specifier);
   }
 
-  return left.kind.localeCompare(right.kind);
+  return compareStrings(left.kind, right.kind);
 }
 
 function compareDiagnostics(
@@ -1130,7 +930,7 @@ function compareDiagnostics(
   right: ModuleResolutionDiagnostic
 ): number {
   if ((left.filePath ?? "") !== (right.filePath ?? "")) {
-    return (left.filePath ?? "").localeCompare(right.filePath ?? "");
+    return compareStrings(left.filePath ?? "", right.filePath ?? "");
   }
 
   if ((left.line ?? 0) !== (right.line ?? 0)) {
@@ -1138,29 +938,58 @@ function compareDiagnostics(
   }
 
   if (left.code !== right.code) {
-    return left.code.localeCompare(right.code);
+    return compareStrings(left.code, right.code);
   }
 
-  return left.message.localeCompare(right.message);
+  return compareStrings(left.message, right.message);
 }
 
 function toTsConfigDiagnostic(
   diagnostic: ts.Diagnostic,
-  filePath: string
+  filePath: string,
+  repositoryRoot: string
 ): ModuleResolutionDiagnostic {
   return {
     severity: diagnostic.category === ts.DiagnosticCategory.Error ? "error" : "warning",
     code: "TSCONFIG_PARSE_ERROR",
-    message: ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
+    message: toRepositoryRelativeMessage(
+      ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
+      repositoryRoot
+    ),
     filePath
   };
 }
 
-function isUnresolvedPackageExtendsDiagnostic(messageText: string | ts.DiagnosticMessageChain): boolean {
-  const flattened = ts.flattenDiagnosticMessageText(messageText, "\n");
+/** Keeps host-specific absolute paths out of diagnostics, which are hashed and stored. */
+function toRepositoryRelativeMessage(message: string, repositoryRoot: string): string {
+  const root = toPosixPath(path.resolve(repositoryRoot));
+  return message
+    .replaceAll(`${root}/`, "")
+    .replaceAll(root, ".")
+    .replaceAll(/'((?:[A-Za-z]:)?\/[^']*)'/gu, "'<outside-repository>'");
+}
+
+/** Bare specifiers in a tsconfig `extends` value, for example `@tsconfig/node20/tsconfig.json`. */
+function readBareExtendsSpecifiers(config: unknown): string[] {
+  const extendsValue = (config as { extends?: unknown } | null)?.extends;
+  const values = Array.isArray(extendsValue) ? extendsValue : [extendsValue];
+  return values.filter(
+    (value): value is string =>
+      typeof value === "string" &&
+      !value.startsWith(".") &&
+      !path.posix.isAbsolute(value) &&
+      !path.win32.isAbsolute(value)
+  );
+}
+
+function isUnresolvedPackageExtends(
+  diagnostic: ts.Diagnostic,
+  message: string,
+  bareExtends: readonly string[]
+): boolean {
   return (
-    (flattened.includes("Cannot read file") || flattened.includes("not found")) &&
-    flattened.includes("@")
+    diagnostic.code === TS_FILE_NOT_FOUND &&
+    bareExtends.some((specifier) => message.includes(`'${specifier}'`))
   );
 }
 

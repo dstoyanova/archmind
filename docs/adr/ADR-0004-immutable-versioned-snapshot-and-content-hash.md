@@ -64,3 +64,12 @@ Normalization rules:
 
 - Requires strict canonicalization rules in analysis output.
 - Any schema changes that affect hashed fields need explicit version and migration handling.
+
+## Addendum (2026-11-17): canonical serialisation and ordering
+
+The original decision required "normalized" content and "deterministic" sorting without defining them. The M1 review found that locale-dependent sorting and host-specific diagnostic text broke the guarantee. The rules below make the specification precise. They refine this decision and do not change it.
+
+- **Canonical JSON.** Hashed content is serialised with `canonicalJson` from `@archmind/domain`: no whitespace, object keys sorted by code unit order at every depth, properties with `undefined` values omitted, non-finite numbers rejected. Array order is preserved, so every collection is sorted by its producer before hashing. This one helper is used for `contentHash`, `analysisConfigHash` and `sourceHash`.
+- **Ordering.** Every sort that feeds snapshot output or a hash uses `compareStrings` from `@archmind/domain` (UTF-16 code unit order). `String.prototype.localeCompare` is not used, because its result depends on the process locale and ICU build.
+- **Diagnostics are hashed.** Diagnostic messages must not contain absolute paths, host names or operating system and parser error text that varies by environment. Paths are repo-relative, and paths outside the repository are replaced by `<outside-repository>`.
+- **Reproducibility tests.** The CLI test suite analyses one fixture twice, in two directories, and with a diagnostic present, and asserts equal `contentHash` values.

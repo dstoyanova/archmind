@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@archmind/contracts": "workspace:*",
+    "@archmind/domain": "workspace:*",
     "minimatch": "^10.1.1"
   }
 }

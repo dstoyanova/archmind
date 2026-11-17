@@ -1,4 +1,5 @@
 import type { AnalysisConfig } from "@archmind/contracts";
+import { compareStrings } from "@archmind/domain";
 import { minimatch } from "minimatch";
 
 export type ComponentKind = "configured" | "package" | "folder" | "root";
@@ -171,7 +172,7 @@ function createPackageComponents(
   }
 
   return packageContexts.sort((left, right) =>
-    left.packageDirectory.localeCompare(right.packageDirectory)
+    compareStrings(left.packageDirectory, right.packageDirectory)
   );
 }
 
@@ -296,7 +297,7 @@ function findConfiguredMatch(
       return right.score - left.score;
     }
 
-    return left.componentId.localeCompare(right.componentId);
+    return compareStrings(left.componentId, right.componentId);
   });
 
   return matches[0] ?? null;
@@ -308,7 +309,7 @@ function findOwningPackageDirectory(
 ): string | null {
   const matches = packageDirectories
     .filter((directory) => containsPath(directory, filePath))
-    .sort((left, right) => right.length - left.length || left.localeCompare(right));
+    .sort((left, right) => right.length - left.length || compareStrings(left, right));
   return matches[0] ?? null;
 }
 
@@ -330,7 +331,7 @@ function findOwningFolderComponent(
         return rightPathLength - leftPathLength;
       }
 
-      return left.id.localeCompare(right.id);
+      return compareStrings(left.id, right.id);
     });
 
   return matches[0] ?? null;
@@ -386,12 +387,12 @@ function findImmediateFoldersUnderRoot(filePaths: string[], rootPath: string): s
     folders.add(normalizePath(`${rootPath}/${folderSegment}`));
   }
 
-  return [...folders].sort((left, right) => left.localeCompare(right));
+  return [...folders].sort(compareStrings);
 }
 
 function normalizePackageDirectories(packageDirectories: string[]): string[] {
   return [...new Set(packageDirectories.map(normalizePath))].sort(
-    (left, right) => left.length - right.length || left.localeCompare(right)
+    (left, right) => left.length - right.length || compareStrings(left, right)
   );
 }
 
@@ -446,5 +447,5 @@ function compareComponents(left: HierarchyComponent, right: HierarchyComponent):
     return left.depth - right.depth;
   }
 
-  return left.id.localeCompare(right.id);
+  return compareStrings(left.id, right.id);
 }

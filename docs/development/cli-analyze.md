@@ -8,15 +8,16 @@ From the repository root:
 
 ```bash
 pnpm install
-pnpm --filter @archmind/cli build
 ```
+
+The CLI runs directly from TypeScript sources through the pinned `tsx` dev dependency, so there is no build step. Paths you pass are resolved relative to the directory you run the command from.
 
 ## Analyze a repository
 
 Run:
 
 ```bash
-pnpm dlx tsx apps/cli/src/main.ts analyze <path> --out <snapshot.json> [--format snapshot|summary]
+pnpm archmind analyze <path> --out <snapshot.json> [--format snapshot|summary]
 ```
 
 ### Required arguments
@@ -34,13 +35,13 @@ pnpm dlx tsx apps/cli/src/main.ts analyze <path> --out <snapshot.json> [--format
 Analyze the current repository and print summary output:
 
 ```bash
-pnpm dlx tsx apps/cli/src/main.ts analyze . --out ./tmp/archmind-snapshot.json --format summary
+pnpm archmind analyze . --out ./tmp/archmind-snapshot.json --format summary
 ```
 
 Analyze another local repository:
 
 ```bash
-pnpm dlx tsx apps/cli/src/main.ts analyze /absolute/path/to/repo --out /absolute/path/to/snapshot.json
+pnpm archmind analyze /absolute/path/to/repo --out /absolute/path/to/snapshot.json
 ```
 
 ## Related benchmark command

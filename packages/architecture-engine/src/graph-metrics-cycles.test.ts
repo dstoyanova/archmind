@@ -202,6 +202,63 @@ describe("buildGraphMetricsAndCycles", () => {
       ])
     );
   });
+  it("keeps edges from files owned directly by a package in depth cycles and metrics", () => {
+    const components = [
+      { id: "root", name: "<root>", depth: 0, kind: "root" as const, paths: ["."] },
+      {
+        id: "pkg",
+        name: "pkg",
+        parentId: "root",
+        depth: 1,
+        kind: "package" as const,
+        paths: ["packages/pkg"]
+      },
+      {
+        id: "feature",
+        name: "feature",
+        parentId: "pkg",
+        depth: 2,
+        kind: "folder" as const,
+        paths: ["packages/pkg/src/feature"]
+      },
+      {
+        id: "other",
+        name: "other",
+        parentId: "pkg",
+        depth: 2,
+        kind: "folder" as const,
+        paths: ["packages/pkg/src/other"]
+      }
+    ];
+
+    const result = buildGraphMetricsAndCycles({
+      components,
+      files: [
+        createFile("f-barrel", "packages/pkg/src/index.ts", "pkg", "source", 1),
+        createFile("f-feature", "packages/pkg/src/feature/a.ts", "feature", "source", 1),
+        createFile("f-other", "packages/pkg/src/other/b.ts", "other", "source", 1)
+      ],
+      fileImports: [
+        createInternalImport("i-barrel-feature", "f-barrel", "f-feature", "static"),
+        createInternalImport("i-feature-barrel", "f-feature", "f-barrel", "static"),
+        createInternalImport("i-other-barrel", "f-other", "f-barrel", "static")
+      ]
+    });
+
+    expect(result.cycles).toContainEqual({
+      level: { kind: "depth", depth: 2 },
+      memberIds: ["feature", "pkg"],
+      typeOnly: false
+    });
+    expect(result.components.find((component) => component.id === "feature")?.metrics).toMatchObject({
+      fanIn: 1,
+      fanOut: 1
+    });
+    expect(result.components.find((component) => component.id === "other")?.metrics).toMatchObject({
+      fanIn: 0,
+      fanOut: 1
+    });
+  });
 });
 
 function createComponents() {

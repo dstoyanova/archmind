@@ -3,6 +3,7 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
 import type { AnalysisConfig } from "@archmind/contracts";
+import { canonicalJson, compareStrings } from "@archmind/domain";
 import ignore from "ignore";
 import { minimatch } from "minimatch";
 
@@ -89,7 +90,7 @@ export class LocalFsSourceProvider implements SourceProvider {
       diagnostics
     );
 
-    sourceFiles.sort((left, right) => left.path.localeCompare(right.path));
+    sourceFiles.sort((left, right) => compareStrings(left.path, right.path));
 
     const files: DiscoveredSourceFile[] = [];
     for (const file of sourceFiles) {
@@ -132,7 +133,7 @@ export class LocalFsSourceProvider implements SourceProvider {
     diagnostics: SourceProviderDiagnostic[]
   ): Promise<SourceFileCandidate[]> {
     const entries = await readdir(currentDirectory, { withFileTypes: true });
-    entries.sort((left, right) => left.name.localeCompare(right.name));
+    entries.sort((left, right) => compareStrings(left.name, right.name));
 
     const sourceFiles: SourceFileCandidate[] = [];
 
@@ -272,28 +273,10 @@ function createSourceHash(
       path: file.path,
       contentHash: file.contentHash
     })),
-    analysisConfig: normalizeForHash(analysisConfig)
+    analysisConfig
   };
 
-  return sha256(JSON.stringify(payload));
-}
-
-function normalizeForHash(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map((entry) => normalizeForHash(entry));
-  }
-
-  if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>).sort(
-      ([left], [right]) => left.localeCompare(right)
-    );
-
-    return Object.fromEntries(
-      entries.map(([key, entry]) => [key, normalizeForHash(entry)])
-    );
-  }
-
-  return value;
+  return sha256(canonicalJson(payload));
 }
 
 function sha256(value: BinaryLike): string {
