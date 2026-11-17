@@ -7,10 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import type { AnalyzeOutputFormat } from "./analyze.js";
 import { runAnalyzeCommand } from "./analyze.js";
-import {
-  runResolutionBenchmark,
-  type ResolutionBenchmarkConfig
-} from "./resolution-benchmark.js";
+import { runResolutionBenchmark, type ResolutionBenchmarkConfig } from "./resolution-benchmark.js";
 
 type WriteFn = (message: string) => void;
 

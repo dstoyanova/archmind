@@ -29,9 +29,7 @@ function createInternalRestrictionRule(
   allowedPackages,
   messagePrefix = "Package dependency rules violation"
 ) {
-  const restrictedPackages = internalPackages.filter(
-    (pkg) => !allowedPackages.includes(pkg)
-  );
+  const restrictedPackages = internalPackages.filter((pkg) => !allowedPackages.includes(pkg));
 
   return [
     "error",
@@ -122,9 +120,10 @@ const archmindConfig = [
   {
     files: ["apps/web/**/*.{ts,tsx,mts,cts}"],
     rules: {
-      "no-restricted-imports": createInternalRestrictionRule([
-        "@archmind/contracts"
-      ], "apps/web may only depend on contracts")
+      "no-restricted-imports": createInternalRestrictionRule(
+        ["@archmind/contracts"],
+        "apps/web may only depend on contracts"
+      )
     }
   },
   {
@@ -148,62 +147,69 @@ const archmindConfig = [
   {
     files: ["packages/contracts/**/*.{ts,tsx,mts,cts}"],
     rules: {
-      "no-restricted-imports": createInternalRestrictionRule([
-        "@archmind/domain"
-      ], "contracts may only depend on domain")
+      "no-restricted-imports": createInternalRestrictionRule(
+        ["@archmind/domain"],
+        "contracts may only depend on domain"
+      )
     }
   },
   {
     files: ["packages/code-analysis/**/*.{ts,tsx,mts,cts}"],
     rules: {
-      "no-restricted-imports": createInternalRestrictionRule([
-        "@archmind/contracts",
-        "@archmind/domain"
-      ], "code-analysis may only depend on contracts and domain")
+      "no-restricted-imports": createInternalRestrictionRule(
+        ["@archmind/contracts", "@archmind/domain"],
+        "code-analysis may only depend on contracts and domain"
+      )
     }
   },
   {
     files: ["packages/architecture-engine/**/*.{ts,tsx,mts,cts}"],
     rules: {
-      "no-restricted-imports": createInternalRestrictionRule([
-        "@archmind/contracts",
-        "@archmind/domain"
-      ], "architecture-engine may only depend on contracts and domain")
+      "no-restricted-imports": createInternalRestrictionRule(
+        ["@archmind/contracts", "@archmind/domain"],
+        "architecture-engine may only depend on contracts and domain"
+      )
     }
   },
   {
     files: ["packages/analysis-pipeline/**/*.{ts,tsx,mts,cts}"],
     rules: {
-      "no-restricted-imports": createInternalRestrictionRule([
-        "@archmind/architecture-engine",
-        "@archmind/code-analysis",
-        "@archmind/contracts",
-        "@archmind/domain"
-      ], "analysis-pipeline may only depend on the engines, contracts and domain")
+      "no-restricted-imports": createInternalRestrictionRule(
+        [
+          "@archmind/architecture-engine",
+          "@archmind/code-analysis",
+          "@archmind/contracts",
+          "@archmind/domain"
+        ],
+        "analysis-pipeline may only depend on the engines, contracts and domain"
+      )
     }
   },
   {
     files: ["packages/governance-engine/**/*.{ts,tsx,mts,cts}"],
     rules: {
-      "no-restricted-imports": createInternalRestrictionRule([
-        "@archmind/contracts"
-      ], "governance-engine may only depend on contracts")
+      "no-restricted-imports": createInternalRestrictionRule(
+        ["@archmind/contracts"],
+        "governance-engine may only depend on contracts"
+      )
     }
   },
   {
     files: ["packages/agent-runtime/**/*.{ts,tsx,mts,cts}"],
     rules: {
-      "no-restricted-imports": createInternalRestrictionRule([
-        "@archmind/contracts"
-      ], "agent-runtime may only depend on contracts")
+      "no-restricted-imports": createInternalRestrictionRule(
+        ["@archmind/contracts"],
+        "agent-runtime may only depend on contracts"
+      )
     }
   },
   {
     files: ["packages/database/**/*.{ts,tsx,mts,cts}"],
     rules: {
-      "no-restricted-imports": createInternalRestrictionRule([
-        "@archmind/contracts"
-      ], "database may only depend on contracts")
+      "no-restricted-imports": createInternalRestrictionRule(
+        ["@archmind/contracts"],
+        "database may only depend on contracts"
+      )
     }
   },
   {

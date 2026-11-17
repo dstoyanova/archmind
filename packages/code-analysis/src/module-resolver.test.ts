@@ -467,28 +467,34 @@ describe("resolveFileImports", () => {
         [{ specifier: "./local.js" }, { specifier: "#nope" }]
       );
 
-      expect(result.imports.map((item) => item.resolution)).toEqual(["internal-file", "unresolved"]);
+      expect(result.imports.map((item) => item.resolution)).toEqual([
+        "internal-file",
+        "unresolved"
+      ]);
       expect(result.resolutionStats.unresolvedRate).toBe(0.5);
     });
 
-    it.skipIf(process.getuid?.() === 0)("reports an unreadable config file instead of ignoring it", async () => {
-      const root = await mkdtemp(path.join(os.tmpdir(), "archmind-resolve-"));
-      try {
-        await writeFile(path.join(root, "tsconfig.json"), "{}");
-        await chmod(path.join(root, "tsconfig.json"), 0o000);
+    it.skipIf(process.getuid?.() === 0)(
+      "reports an unreadable config file instead of ignoring it",
+      async () => {
+        const root = await mkdtemp(path.join(os.tmpdir(), "archmind-resolve-"));
+        try {
+          await writeFile(path.join(root, "tsconfig.json"), "{}");
+          await chmod(path.join(root, "tsconfig.json"), 0o000);
 
-        const result = await resolveFileImports({ repositoryRoot: root, files: [], imports: [] });
+          const result = await resolveFileImports({ repositoryRoot: root, files: [], imports: [] });
 
-        expect(result.diagnostics).toContainEqual({
-          severity: "warning",
-          code: "FILE_READ_FAILED",
-          message: 'Could not read "tsconfig.json"; it is ignored for module resolution.',
-          filePath: "tsconfig.json"
-        });
-      } finally {
-        await chmod(path.join(root, "tsconfig.json"), 0o600);
-        await rm(root, { recursive: true, force: true });
+          expect(result.diagnostics).toContainEqual({
+            severity: "warning",
+            code: "FILE_READ_FAILED",
+            message: 'Could not read "tsconfig.json"; it is ignored for module resolution.',
+            filePath: "tsconfig.json"
+          });
+        } finally {
+          await chmod(path.join(root, "tsconfig.json"), 0o600);
+          await rm(root, { recursive: true, force: true });
+        }
       }
-    });
+    );
   });
 });

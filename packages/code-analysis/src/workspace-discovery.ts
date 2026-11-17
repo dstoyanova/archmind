@@ -64,7 +64,9 @@ export async function discoverWorkspace(
 
   const patterns = collectWorkspacePatterns(
     manifestsByDirectory.get(".") ?? {},
-    files.has("pnpm-workspace.yaml") ? await readTextFileIfPresent(root, "pnpm-workspace.yaml") : null
+    files.has("pnpm-workspace.yaml")
+      ? await readTextFileIfPresent(root, "pnpm-workspace.yaml")
+      : null
   );
   const includePatterns = patterns.filter((pattern) => !pattern.startsWith("!"));
   const excludePatterns = patterns
@@ -98,7 +100,10 @@ function findDuplicatePackageNames(packages: WorkspacePackageInfo[]): WorkspaceD
   const directoriesByName = new Map<string, string[]>();
   for (const { directory, manifest } of packages) {
     if (manifest.name) {
-      directoriesByName.set(manifest.name, [...(directoriesByName.get(manifest.name) ?? []), directory]);
+      directoriesByName.set(manifest.name, [
+        ...(directoriesByName.get(manifest.name) ?? []),
+        directory
+      ]);
     }
   }
 
@@ -137,7 +142,9 @@ function addPattern(patterns: Set<string>, pattern: unknown): void {
   }
 
   const isNegated = pattern.startsWith("!");
-  const normalized = (isNegated ? pattern.slice(1) : pattern).replace(/^\.\//u, "").replace(/\/+$/u, "");
+  const normalized = (isNegated ? pattern.slice(1) : pattern)
+    .replace(/^\.\//u, "")
+    .replace(/\/+$/u, "");
   if (normalized) {
     patterns.add(isNegated ? `!${normalized}` : normalized);
   }

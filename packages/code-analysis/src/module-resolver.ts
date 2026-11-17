@@ -218,7 +218,9 @@ function resolveWorkspacePackages(
       rootDir: parsedTsConfig?.options.rootDir
         ? toPosixPath(parsedTsConfig.options.rootDir)
         : undefined,
-      outDir: parsedTsConfig?.options.outDir ? toPosixPath(parsedTsConfig.options.outDir) : undefined
+      outDir: parsedTsConfig?.options.outDir
+        ? toPosixPath(parsedTsConfig.options.outDir)
+        : undefined
     });
   }
 
@@ -472,9 +474,7 @@ function resolveWorkspaceImportToSourceFile(
     }
 
     const candidateFilePath =
-      packageDirectory === "."
-        ? packageRelativePath
-        : `${packageDirectory}/${packageRelativePath}`;
+      packageDirectory === "." ? packageRelativePath : `${packageDirectory}/${packageRelativePath}`;
     const resolved = resolveToKnownSourceFile(candidateFilePath, context.repositoryFiles);
     if (resolved) {
       return resolved;
@@ -530,7 +530,9 @@ function collectWorkspaceEntryCandidates(
     }
   }
 
-  return dedupe(candidates.map(normalizeSubpath).filter((value): value is string => Boolean(value)));
+  return dedupe(
+    candidates.map(normalizeSubpath).filter((value): value is string => Boolean(value))
+  );
 }
 
 function mapWorkspaceEntryToSourcePath(
@@ -644,15 +646,11 @@ function buildResolutionStats(
 
   return {
     countsByResolution,
-    unresolvedRate:
-      candidateImportCount === 0 ? 0 : unresolvedCandidates / candidateImportCount
+    unresolvedRate: candidateImportCount === 0 ? 0 : unresolvedCandidates / candidateImportCount
   };
 }
 
-function countCandidateImports(
-  imports: ExtractedFileImport[],
-  context: ResolutionContext
-): number {
+function countCandidateImports(imports: ExtractedFileImport[], context: ResolutionContext): number {
   return imports.filter((importItem) => isCandidateInternalImport(importItem.specifier, context))
     .length;
 }
@@ -871,7 +869,10 @@ function createRestrictedModuleResolutionHost(
     },
     getDirectories(directoryName) {
       const relativeDirectory = toRepositoryRelativePath(repositoryRoot, directoryName);
-      if (!relativeDirectory && toPosixPath(path.resolve(directoryName)) !== toPosixPath(repositoryRoot)) {
+      if (
+        !relativeDirectory &&
+        toPosixPath(path.resolve(directoryName)) !== toPosixPath(repositoryRoot)
+      ) {
         return [];
       }
 
@@ -890,10 +891,7 @@ function createRestrictedModuleResolutionHost(
   };
 }
 
-function resolveToKnownSourceFile(
-  filePath: string,
-  repositoryFiles: Set<string>
-): string | null {
+function resolveToKnownSourceFile(filePath: string, repositoryFiles: Set<string>): string | null {
   const normalized = normalizeSubpath(filePath);
   if (!normalized) {
     return null;
@@ -1085,11 +1083,41 @@ function isUnresolvedPackageExtends(
 }
 
 const ASSET_EXTENSIONS = new Set([
-  ".css", ".scss", ".sass", ".less", ".styl",
-  ".json", ".yaml", ".yml", ".toml", ".txt", ".md", ".html", ".graphql", ".gql", ".wasm",
-  ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".ico", ".bmp",
-  ".woff", ".woff2", ".ttf", ".otf", ".eot",
-  ".mp3", ".mp4", ".webm", ".wav", ".ogg", ".pdf"
+  ".css",
+  ".scss",
+  ".sass",
+  ".less",
+  ".styl",
+  ".json",
+  ".yaml",
+  ".yml",
+  ".toml",
+  ".txt",
+  ".md",
+  ".html",
+  ".graphql",
+  ".gql",
+  ".wasm",
+  ".svg",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+  ".avif",
+  ".ico",
+  ".bmp",
+  ".woff",
+  ".woff2",
+  ".ttf",
+  ".otf",
+  ".eot",
+  ".mp3",
+  ".mp4",
+  ".webm",
+  ".wav",
+  ".ogg",
+  ".pdf"
 ]);
 
 /** A relative import of a non-code file, such as `./styles.css`, with an optional `?query` or `#hash`. */

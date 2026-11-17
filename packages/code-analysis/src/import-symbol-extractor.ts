@@ -72,12 +72,7 @@ export async function extractImportsAndSymbols(
       continue;
     }
 
-    const sourceFile = ts.createSourceFile(
-      file.path,
-      sourceText,
-      ts.ScriptTarget.Latest,
-      true
-    );
+    const sourceFile = ts.createSourceFile(file.path, sourceText, ts.ScriptTarget.Latest, true);
 
     for (const parseDiagnostic of getSyntacticDiagnostics(sourceFile)) {
       const start = parseDiagnostic.start ?? 0;
@@ -190,9 +185,7 @@ function collectImports(
   visit(sourceFile);
 }
 
-function classifyImportDeclaration(
-  declaration: ts.ImportDeclaration
-): ExtractedFileImport["kind"] {
+function classifyImportDeclaration(declaration: ts.ImportDeclaration): ExtractedFileImport["kind"] {
   const importClause = declaration.importClause;
   if (!importClause) {
     return "static";
@@ -213,10 +206,7 @@ function classifyImportDeclaration(
 
   if (importClause.namedBindings && ts.isNamedImports(importClause.namedBindings)) {
     const elements = importClause.namedBindings.elements;
-    if (
-      elements.length > 0 &&
-      elements.every((element) => element.isTypeOnly)
-    ) {
+    if (elements.length > 0 && elements.every((element) => element.isTypeOnly)) {
       return "type-only";
     }
   }
@@ -224,9 +214,7 @@ function classifyImportDeclaration(
   return "static";
 }
 
-function classifyExportDeclaration(
-  declaration: ts.ExportDeclaration
-): ExtractedFileImport["kind"] {
+function classifyExportDeclaration(declaration: ts.ExportDeclaration): ExtractedFileImport["kind"] {
   if (declaration.isTypeOnly) {
     return "type-only";
   }
@@ -403,9 +391,7 @@ function collectLocalDeclarationKinds(sourceFile: ts.SourceFile): Map<string, Sy
   return kinds;
 }
 
-function extractBindingNames(
-  declarations: readonly ts.VariableDeclaration[]
-): string[] {
+function extractBindingNames(declarations: readonly ts.VariableDeclaration[]): string[] {
   const names: string[] = [];
 
   const visitName = (name: ts.BindingName): void => {
@@ -433,17 +419,13 @@ function extractBindingNames(
 function hasExportModifier(node: ts.Node): boolean {
   return (
     ts.canHaveModifiers(node) &&
-    ts
-      .getModifiers(node)
-      ?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) === true
+    ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) ===
+      true
   );
 }
 
 function isRequireCall(node: ts.CallExpression): boolean {
-  return (
-    ts.isIdentifier(node.expression) &&
-    node.expression.text === "require"
-  );
+  return ts.isIdentifier(node.expression) && node.expression.text === "require";
 }
 
 function isDynamicImportCall(node: ts.CallExpression): boolean {
@@ -462,9 +444,7 @@ function getLineAndColumn(
   sourceFile: ts.SourceFile,
   node: ts.Node
 ): { line: number; column: number } {
-  const position = sourceFile.getLineAndCharacterOfPosition(
-    node.getStart(sourceFile)
-  );
+  const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
   return {
     line: position.line + 1,
     column: position.character + 1

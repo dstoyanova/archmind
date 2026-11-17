@@ -45,8 +45,7 @@ export async function runResolutionBenchmark(
     const analyzedEdges = collectInternalFileEdges(snapshot);
     const agreement = computeAgreement(analyzedEdges, referenceEdges);
 
-    const performanceTargetMet =
-      snapshot.files.length >= 5000 ? durationMs < 120000 : undefined;
+    const performanceTargetMet = snapshot.files.length >= 5000 ? durationMs < 120000 : undefined;
 
     results.push({
       repository: repository.name,
@@ -104,9 +103,7 @@ async function loadReferenceEdges(referenceEdgesPath: string): Promise<Set<strin
   const content = await readFile(resolvedPath, "utf8");
   const parsed = JSON.parse(content) as unknown;
   if (!Array.isArray(parsed)) {
-    throw new Error(
-      `Reference edge file "${resolvedPath}" must be a JSON array of entries.`
-    );
+    throw new Error(`Reference edge file "${resolvedPath}" must be a JSON array of entries.`);
   }
 
   const edges = new Set<string>();
@@ -128,9 +125,7 @@ async function loadReferenceEdges(referenceEdgesPath: string): Promise<Set<strin
       continue;
     }
 
-    throw new Error(
-      `Reference edge file "${resolvedPath}" contains an invalid edge entry.`
-    );
+    throw new Error(`Reference edge file "${resolvedPath}" contains an invalid edge entry.`);
   }
 
   return edges;

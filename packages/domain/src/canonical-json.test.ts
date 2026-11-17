@@ -12,13 +12,15 @@ describe("compareStrings", () => {
 
 describe("canonicalJson", () => {
   it("sorts keys by code unit at every depth and omits undefined properties", () => {
-    expect(canonicalJson({ b: 1, B: { z: [2, { y: undefined, x: 1 }], ä: "x" }, a: undefined })).toBe(
-      '{"B":{"z":[2,{"x":1}],"ä":"x"},"b":1}'
-    );
+    expect(
+      canonicalJson({ b: 1, B: { z: [2, { y: undefined, x: 1 }], ä: "x" }, a: undefined })
+    ).toBe('{"B":{"z":[2,{"x":1}],"ä":"x"},"b":1}');
   });
 
   it("keeps integer-like keys in sorted order and preserves array order", () => {
-    expect(canonicalJson({ "10": 1, "2": 2, list: [3, 1, 2] })).toBe('{"10":1,"2":2,"list":[3,1,2]}');
+    expect(canonicalJson({ "10": 1, "2": 2, list: [3, 1, 2] })).toBe(
+      '{"10":1,"2":2,"list":[3,1,2]}'
+    );
   });
 
   it("rejects values that have no canonical form", () => {

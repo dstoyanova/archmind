@@ -31,7 +31,10 @@ describe("LocalFsSourceProvider", () => {
       await writeFile(path.join(root, "src/keep.ts"), "export const keep = 1;\n");
       await writeFile(path.join(root, "src/ignored.ts"), "export const ignored = 1;\n");
       await writeFile(path.join(root, "src/types.d.ts"), "declare const x: number;\n");
-      await writeFile(path.join(root, "src/generated/model.ts"), "export const generated = true;\n");
+      await writeFile(
+        path.join(root, "src/generated/model.ts"),
+        "export const generated = true;\n"
+      );
       await writeFile(path.join(root, "node_modules/pkg/index.ts"), "export const dep = 1;\n");
       await writeFile(path.join(root, "dist/output.ts"), "export const built = true;\n");
 
@@ -130,10 +133,7 @@ describe("LocalFsSourceProvider", () => {
       await mkdir(path.join(root, "src"), { recursive: true });
       await writeFile(path.join(root, "src/b.ts"), "export const b = 1;\n");
       await writeFile(path.join(root, "src/a.ts"), "export const a = 1;\n");
-      await symlink(
-        path.join(root, "src/a.ts"),
-        path.join(root, "src/link.ts")
-      );
+      await symlink(path.join(root, "src/a.ts"), path.join(root, "src/link.ts"));
 
       const provider = new LocalFsSourceProvider();
       const first = await provider.discover({
@@ -218,14 +218,21 @@ describe("LocalFsSourceProvider", () => {
     try {
       await mkdir(path.join(root, "src"), { recursive: true });
       await writeFile(path.join(root, "src/a.ts"), "export const a = 1;\n");
-      await writeFile(path.join(root, "tsconfig.json"), '{"compilerOptions":{"paths":{"@/*":["src/*"]}}}');
+      await writeFile(
+        path.join(root, "tsconfig.json"),
+        '{"compilerOptions":{"paths":{"@/*":["src/*"]}}}'
+      );
       const provider = new LocalFsSourceProvider();
-      const discover = () => provider.discover({ repositoryRoot: root, analysisConfig: analysisConfig() });
+      const discover = () =>
+        provider.discover({ repositoryRoot: root, analysisConfig: analysisConfig() });
 
       const before = await discover();
       expect((await discover()).sourceHash).toBe(before.sourceHash);
 
-      await writeFile(path.join(root, "tsconfig.json"), '{"compilerOptions":{"paths":{"~/*":["src/*"]}}}');
+      await writeFile(
+        path.join(root, "tsconfig.json"),
+        '{"compilerOptions":{"paths":{"~/*":["src/*"]}}}'
+      );
       expect((await discover()).sourceHash).not.toBe(before.sourceHash);
 
       await writeFile(path.join(root, "package.json"), '{"name":"x"}');
@@ -282,11 +289,17 @@ describe("LocalFsSourceProvider", () => {
     try {
       await writeFile(path.join(lfRoot, "a.ts"), "export const a = 1;\nexport const b = 2;\n");
       await writeFile(path.join(lfRoot, "package.json"), '{\n  "name": "x"\n}\n');
-      await writeFile(path.join(crlfRoot, "a.ts"), "export const a = 1;\r\nexport const b = 2;\r\n");
+      await writeFile(
+        path.join(crlfRoot, "a.ts"),
+        "export const a = 1;\r\nexport const b = 2;\r\n"
+      );
       await writeFile(path.join(crlfRoot, "package.json"), '{\r\n  "name": "x"\r\n}\r\n');
 
       const discover = (root: string) =>
-        new LocalFsSourceProvider().discover({ repositoryRoot: root, analysisConfig: analysisConfig() });
+        new LocalFsSourceProvider().discover({
+          repositoryRoot: root,
+          analysisConfig: analysisConfig()
+        });
       const [lf, crlf] = [await discover(lfRoot), await discover(crlfRoot)];
 
       expect(crlf.sourceHash).toBe(lf.sourceHash);

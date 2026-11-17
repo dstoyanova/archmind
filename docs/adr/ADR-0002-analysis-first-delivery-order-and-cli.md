@@ -48,4 +48,3 @@ Create `apps/cli` as the first app so deterministic analysis and governance chec
 
 - User-facing hosted workflows arrive later in the roadmap.
 - Temporary local-only constraints in M1–M3.
-

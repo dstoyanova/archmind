@@ -58,8 +58,14 @@ describe("discoverWorkspace", () => {
   });
 
   it("supports negation globs from package.json and pnpm-workspace.yaml", async () => {
-    await writeRepoFile("package.json", JSON.stringify({ workspaces: ["packages/*", "!packages/legacy"] }));
-    await writeRepoFile("pnpm-workspace.yaml", ["packages:", "  - tools/*", "  - '!tools/internal'"].join("\n"));
+    await writeRepoFile(
+      "package.json",
+      JSON.stringify({ workspaces: ["packages/*", "!packages/legacy"] })
+    );
+    await writeRepoFile(
+      "pnpm-workspace.yaml",
+      ["packages:", "  - tools/*", "  - '!tools/internal'"].join("\n")
+    );
     for (const directory of ["packages/a", "packages/legacy", "tools/cli", "tools/internal"]) {
       await writeRepoFile(`${directory}/package.json`, JSON.stringify({ name: directory }));
     }
@@ -85,7 +91,9 @@ describe("discoverWorkspace", () => {
       "packages/a",
       "packages/b"
     ]);
-    expect(packages.find((workspacePackage) => workspacePackage.directory === "packages/a")?.manifest).toEqual({});
+    expect(
+      packages.find((workspacePackage) => workspacePackage.directory === "packages/a")?.manifest
+    ).toEqual({});
     expect(diagnostics).toEqual([
       expect.objectContaining({
         code: "PACKAGE_MANIFEST_INVALID",

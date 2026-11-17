@@ -3,7 +3,7 @@
 ArchMind is built in this order:
 
 1. **Analysis first.** The deterministic analysis engine and explorer come first.
-2. **Local governance.** Rules and findings follow straight after, while everything still runs locally. This answers *"what should I be concerned about?"* before any investment in persistence, authentication or hosting.
+2. **Local governance.** Rules and findings follow straight after, while everything still runs locally. This answers _"what should I be concerned about?"_ before any investment in persistence, authentication or hosting.
 3. **Platform.** Persistence, then GitHub with teams and a hosted staging environment.
 4. **AI.** The assistant comes last, so it can rely on deterministic facts and findings.
 
@@ -39,6 +39,7 @@ Every milestone ends with a **working, demoable product**. No milestone consists
 **Outcome:** `archmind analyze <path> --out snapshot.json` describes the architecture of a local TypeScript repository.
 
 **Exit criteria:**
+
 - Every fixture matches its expected graph.
 - On at least two open-source monorepos, at most 2% of imports are unresolved and at least 95% of internal edges agree with a reference tool.
 - The same files produce the same `contentHash` in any directory.
@@ -57,12 +58,13 @@ Every milestone ends with a **working, demoable product**. No milestone consists
 **Outcome:** browse the architecture of any repository analysed in M1.
 
 **Exit criteria:**
+
 - ArchMind's own bounded contexts are visible as child components.
 - The graph stays usable at around 300 components and 3,000 dependencies.
 
 ## M3 — Local governance
 
-**Goal:** answer *"what should I be concerned about?"* before any platform investment.
+**Goal:** answer _"what should I be concerned about?"_ before any platform investment.
 
 - [ ] Rule model in `archmind.config.json`: layers, forbidden dependencies, cycles, thresholds, restricted packages.
 - [ ] Pure governance engine with built-in default rules, producing immutable rule evaluations.
@@ -73,6 +75,7 @@ Every milestone ends with a **working, demoable product**. No milestone consists
 **Outcome:** risks and rule violations are visible with file-level evidence, both locally and in CI.
 
 **Exit criteria:**
+
 - Tests and type-only cycles do not produce default findings.
 - `archmind check` fails on violations, and with a baseline reports only new ones.
 - ArchMind's own CI passes `archmind check`.
@@ -91,6 +94,7 @@ Every milestone ends with a **working, demoable product**. No milestone consists
 **Outcome:** `docker compose up`, add a local repository, analyse it, and see its history and how its findings change over time.
 
 **Exit criteria:**
+
 - Killing the worker mid-run leaves no partial snapshot, and the run is recovered.
 - Runs that exceed their memory or time limit fail cleanly.
 - Logs contain no secrets or source.
@@ -109,6 +113,7 @@ Every milestone ends with a **working, demoable product**. No milestone consists
 **Outcome:** an invited teammate signs in on staging and explores a private repository.
 
 **Exit criteria:**
+
 - Automated tests prove there is no cross-tenant access and that users cannot link repositories they can't access.
 - The security review is signed off before any external user is invited.
 
@@ -126,6 +131,7 @@ Every milestone ends with a **working, demoable product**. No milestone consists
 **Outcome:** users ask questions and get answers that cite evidence.
 
 **Exit criteria:**
+
 - The live evaluation meets the quality bar.
 - Every displayed citation resolves.
 - An AI failure never affects analysis or findings.
@@ -144,6 +150,7 @@ Every milestone ends with a **working, demoable product**. No milestone consists
 **Outcome:** a usable MVP ready for real-world feedback.
 
 **Exit criteria:**
+
 - External teams onboard without help.
 - Errors and slow analyses trigger alerts.
 - Pilot feedback is collected and post-beta priorities are agreed.

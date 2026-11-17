@@ -80,7 +80,9 @@ export function projectEdgesToDepth(
   edges: readonly HierarchyEdge[],
   depth: number
 ): ProjectedHierarchyEdge[] {
-  const parentById = new Map(components.map((component) => [component.id, component.parentId] as const));
+  const parentById = new Map(
+    components.map((component) => [component.id, component.parentId] as const)
+  );
   const visible = collectVisibleComponentIds(components, depth);
   const projected = new Map<string, ProjectedHierarchyEdge>();
 

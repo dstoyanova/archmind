@@ -4,10 +4,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import {
-  formatBenchmarkReport,
-  runResolutionBenchmark
-} from "./resolution-benchmark.js";
+import { formatBenchmarkReport, runResolutionBenchmark } from "./resolution-benchmark.js";
 
 function fixturePath(name: string): string {
   return path.join(import.meta.dirname, "..", "fixtures", name);

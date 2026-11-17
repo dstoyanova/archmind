@@ -1,6 +1,4 @@
-import type {
-  ArchitectureSnapshotDocument
-} from "@archmind/contracts";
+import type { ArchitectureSnapshotDocument } from "@archmind/contracts";
 import {
   compareStrings,
   findCycles,
@@ -75,7 +73,8 @@ export function buildGraphMetricsAndCycles(
 
     if (fileImport.externalPackage) {
       const externalKey = `${fromFile.componentId}→${fileImport.externalPackage}`;
-      const countsByRole = externalDependencyEvidence.get(externalKey) ?? new Map<FileRole, number>();
+      const countsByRole =
+        externalDependencyEvidence.get(externalKey) ?? new Map<FileRole, number>();
       countsByRole.set(fromFile.role, (countsByRole.get(fromFile.role) ?? 0) + 1);
       externalDependencyEvidence.set(externalKey, countsByRole);
       continue;
@@ -142,7 +141,14 @@ export function buildGraphMetricsAndCycles(
         evidenceImportIds
       } satisfies SnapshotDependency;
     })
-    .sort((left, right) => compareEdges(left.fromComponentId, left.toComponentId, right.fromComponentId, right.toComponentId));
+    .sort((left, right) =>
+      compareEdges(
+        left.fromComponentId,
+        left.toComponentId,
+        right.fromComponentId,
+        right.toComponentId
+      )
+    );
 
   const externalDependencies = [...externalDependencyEvidence.entries()]
     .map(([key, countsByRoleMap]) => {
@@ -163,7 +169,9 @@ export function buildGraphMetricsAndCycles(
         countsByRole
       } satisfies SnapshotExternalDependency;
     })
-    .sort((left, right) => compareEdges(left.componentId, left.packageName, right.componentId, right.packageName));
+    .sort((left, right) =>
+      compareEdges(left.componentId, left.packageName, right.componentId, right.packageName)
+    );
 
   const metricsByComponent = buildComponentMetrics(
     components,
@@ -348,10 +356,7 @@ function parseEdgeKey(key: string): [string, string] {
   return [key.slice(0, separatorIndex), key.slice(separatorIndex + 1)];
 }
 
-function compareGraphComponentsById(
-  left: GraphComponentInput,
-  right: GraphComponentInput
-): number {
+function compareGraphComponentsById(left: GraphComponentInput, right: GraphComponentInput): number {
   return compareStrings(left.id, right.id);
 }
 
@@ -373,7 +378,11 @@ function compareCycles(left: SnapshotCycle, right: SnapshotCycle): number {
     return compareStrings(left.level.kind, right.level.kind);
   }
 
-  if (left.level.kind === "depth" && right.level.kind === "depth" && left.level.depth !== right.level.depth) {
+  if (
+    left.level.kind === "depth" &&
+    right.level.kind === "depth" &&
+    left.level.depth !== right.level.depth
+  ) {
     return left.level.depth - right.level.depth;
   }
 

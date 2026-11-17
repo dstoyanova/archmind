@@ -68,9 +68,7 @@ describe("analyzeRepository", () => {
       (fileImport) => fileImport.specifier === "@workspace/lib/internal/feature"
     );
     expect(toResolvedPath(rootImport?.toFileId)).toBe("packages/lib/src/index.ts");
-    expect(toResolvedPath(subpathImport?.toFileId)).toBe(
-      "packages/lib/src/internal/feature.ts"
-    );
+    expect(toResolvedPath(subpathImport?.toFileId)).toBe("packages/lib/src/internal/feature.ts");
   });
 
   it("covers the path-alias fixture", async () => {
@@ -233,14 +231,17 @@ describe("analyzeRepository reproducibility", () => {
   }
 
   it("produces the same contentHash when the same directory is analysed twice", async () => {
-    const first = (await analyzeRepository({ repositoryRoot: fixturePath("single-package") })).snapshot;
-    const second = (await analyzeRepository({ repositoryRoot: fixturePath("single-package") })).snapshot;
+    const first = (await analyzeRepository({ repositoryRoot: fixturePath("single-package") }))
+      .snapshot;
+    const second = (await analyzeRepository({ repositoryRoot: fixturePath("single-package") }))
+      .snapshot;
 
     expect(second.contentHash).toBe(first.contentHash);
   });
 
   it("produces the same contentHash for a copy in a different directory", async () => {
-    const original = (await analyzeRepository({ repositoryRoot: fixturePath("single-package") })).snapshot;
+    const original = (await analyzeRepository({ repositoryRoot: fixturePath("single-package") }))
+      .snapshot;
     const copy = await analyzeInTempCopy("single-package", "archmind-repro-a-");
 
     expect(copy.contentHash).toBe(original.contentHash);

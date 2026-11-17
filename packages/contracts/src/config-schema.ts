@@ -22,7 +22,10 @@ const fileRolesSchema = z
 
 /** Makes `./apps/api`, `apps/api/` and `apps\api` equivalent keys. */
 function normalizeConfigPath(value: string): string {
-  const normalized = value.replaceAll("\\", "/").replace(/^(?:\.\/)+/u, "").replace(/\/+$/u, "");
+  const normalized = value
+    .replaceAll("\\", "/")
+    .replace(/^(?:\.\/)+/u, "")
+    .replace(/\/+$/u, "");
   return normalized === "" ? "." : normalized;
 }
 

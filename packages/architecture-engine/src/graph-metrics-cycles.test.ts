@@ -119,8 +119,7 @@ describe("buildGraphMetricsAndCycles", () => {
     });
     expect(
       result.cycles.some(
-        (cycle) =>
-          cycle.memberIds.includes("f-a-test-1") || cycle.memberIds.includes("f-a-test-2")
+        (cycle) => cycle.memberIds.includes("f-a-test-1") || cycle.memberIds.includes("f-a-test-2")
       )
     ).toBe(false);
   });
@@ -250,7 +249,9 @@ describe("buildGraphMetricsAndCycles", () => {
       memberIds: ["feature", "pkg"],
       typeOnly: false
     });
-    expect(result.components.find((component) => component.id === "feature")?.metrics).toMatchObject({
+    expect(
+      result.components.find((component) => component.id === "feature")?.metrics
+    ).toMatchObject({
       fanIn: 1,
       fanOut: 1
     });

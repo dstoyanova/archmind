@@ -1,17 +1,11 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 
-import {
-  architectureSnapshotSchema,
-  type ArchitectureSnapshotDocument
-} from "@archmind/contracts";
+import { architectureSnapshotSchema, type ArchitectureSnapshotDocument } from "@archmind/contracts";
 import { compareStrings } from "@archmind/domain";
 
 import { computeContentHash } from "./content-hash.js";
-import {
-  buildGraphMetricsAndCycles,
-  type GraphComponentInput
-} from "./graph-metrics-cycles.js";
+import { buildGraphMetricsAndCycles, type GraphComponentInput } from "./graph-metrics-cycles.js";
 
 type SnapshotSource = ArchitectureSnapshotDocument["source"];
 type SnapshotDiagnostic = ArchitectureSnapshotDocument["diagnostics"][number];
@@ -158,7 +152,9 @@ export function buildArchitectureSnapshot(
 
 function normalizeComponents(
   components: SnapshotBuilderComponentInput[]
-): Array<Omit<ArchitectureSnapshotDocument["components"][number], "metrics"> & { inputId: string }> {
+): Array<
+  Omit<ArchitectureSnapshotDocument["components"][number], "metrics"> & { inputId: string }
+> {
   const sortedComponents = [...components].sort((left, right) => {
     if (left.depth !== right.depth) {
       return left.depth - right.depth;
@@ -175,9 +171,7 @@ function normalizeComponents(
 
   for (const component of sortedComponents) {
     const id = deterministicId("cmp", component.id);
-    const parentId = component.parentId
-      ? normalizedIdByInputId.get(component.parentId)
-      : undefined;
+    const parentId = component.parentId ? normalizedIdByInputId.get(component.parentId) : undefined;
 
     normalized.push({
       inputId: component.id,
@@ -194,9 +188,7 @@ function normalizeComponents(
   return normalized;
 }
 
-function buildOwnershipMap(
-  ownership: SnapshotBuilderOwnershipInput[]
-): Map<string, string> {
+function buildOwnershipMap(ownership: SnapshotBuilderOwnershipInput[]): Map<string, string> {
   const ownershipByPath = new Map<string, string>();
   for (const entry of ownership) {
     const existing = ownershipByPath.get(entry.filePath);
@@ -266,8 +258,7 @@ function normalizeFiles(
         role: file.role,
         language: file.language ?? resolveLanguage(file.path),
         loc: file.loc ?? 0,
-        parseStatus:
-          file.parseStatus ?? parseStatusByFilePath.get(file.path) ?? "parsed"
+        parseStatus: file.parseStatus ?? parseStatusByFilePath.get(file.path) ?? "parsed"
       };
     });
 }
@@ -279,53 +270,51 @@ function normalizeFileImports(
   workspacePackageComponents: Record<string, string> | undefined,
   componentIdByInputId: Map<string, string>
 ): ArchitectureSnapshotDocument["fileImports"] {
-  return [...fileImports]
-    .sort(compareImportInput)
-    .flatMap((fileImport) => {
-      const fromFileId = fileIdByPath.get(fileImport.filePath);
-      if (!fromFileId) {
-        return [];
-      }
+  return [...fileImports].sort(compareImportInput).flatMap((fileImport) => {
+    const fromFileId = fileIdByPath.get(fileImport.filePath);
+    if (!fromFileId) {
+      return [];
+    }
 
-      const toFileId = fileImport.resolvedFilePath
-        ? fileIdByPath.get(fileImport.resolvedFilePath)
+    const toFileId = fileImport.resolvedFilePath
+      ? fileIdByPath.get(fileImport.resolvedFilePath)
+      : undefined;
+    const toComponentId = toFileId
+      ? componentIdByFilePath.get(fileImport.resolvedFilePath ?? "")
+      : resolveWorkspacePackageComponentId(
+          fileImport.workspacePackage,
+          workspacePackageComponents,
+          componentIdByInputId
+        );
+    const externalPackage =
+      fileImport.resolution === "external-package"
+        ? (fileImport.externalPackage ?? extractPackageName(fileImport.specifier))
         : undefined;
-      const toComponentId = toFileId
-        ? componentIdByFilePath.get(fileImport.resolvedFilePath ?? "")
-        : resolveWorkspacePackageComponentId(
-            fileImport.workspacePackage,
-            workspacePackageComponents,
-            componentIdByInputId
-          );
-      const externalPackage =
-        fileImport.resolution === "external-package"
-          ? (fileImport.externalPackage ?? extractPackageName(fileImport.specifier))
-          : undefined;
 
-      return [
-        {
-          id: deterministicId(
-            "imp",
-            [
-              fileImport.filePath,
-              String(fileImport.line),
-              String(fileImport.column),
-              fileImport.specifier,
-              fileImport.kind
-            ].join("|")
-          ),
-          fromFileId,
-          specifier: fileImport.specifier,
-          kind: fileImport.kind,
-          resolution: fileImport.resolution,
-          toFileId,
-          toComponentId,
-          externalPackage,
-          line: fileImport.line,
-          column: fileImport.column
-        }
-      ];
-    });
+    return [
+      {
+        id: deterministicId(
+          "imp",
+          [
+            fileImport.filePath,
+            String(fileImport.line),
+            String(fileImport.column),
+            fileImport.specifier,
+            fileImport.kind
+          ].join("|")
+        ),
+        fromFileId,
+        specifier: fileImport.specifier,
+        kind: fileImport.kind,
+        resolution: fileImport.resolution,
+        toFileId,
+        toComponentId,
+        externalPackage,
+        line: fileImport.line,
+        column: fileImport.column
+      }
+    ];
+  });
 }
 
 function normalizeSymbols(
@@ -380,9 +369,7 @@ function normalizeSymbols(
     });
 }
 
-function normalizeDiagnostics(
-  diagnostics: SnapshotDiagnostic[]
-): SnapshotDiagnostic[] {
+function normalizeDiagnostics(diagnostics: SnapshotDiagnostic[]): SnapshotDiagnostic[] {
   return [...diagnostics].sort((left, right) => {
     if (left.severity !== right.severity) {
       return compareStrings(left.severity, right.severity);

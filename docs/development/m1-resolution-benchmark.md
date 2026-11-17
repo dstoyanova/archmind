@@ -62,7 +62,7 @@ Peak memory of the whole `resolution-benchmark` run over both repositories (one 
 
 | Repository       |  Files | Duration (seconds) | Peak memory | Target (< 120s when files >= 5,000) |
 | ---------------- | -----: | -----------------: | ----------: | :---------------------------------: |
-| microsoft/vscode | 14,846 |              25.37 |   2.1 GiB   |                 ✅                  |
+| microsoft/vscode | 14,846 |              25.37 |     2.1 GiB |                 ✅                  |
 
 ### Independent comparison
 

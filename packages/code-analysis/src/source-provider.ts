@@ -1,12 +1,6 @@
 import type { AnalysisConfig } from "@archmind/contracts";
 
-export const FILE_ROLES = [
-  "source",
-  "test",
-  "story",
-  "script",
-  "config"
-] as const;
+export const FILE_ROLES = ["source", "test", "story", "script", "config"] as const;
 
 export type FileRole = (typeof FILE_ROLES)[number];
 

@@ -1,20 +1,8 @@
-export const FILE_ROLES = [
-  "source",
-  "test",
-  "story",
-  "script",
-  "config"
-] as const;
+export const FILE_ROLES = ["source", "test", "story", "script", "config"] as const;
 
 export type FileRole = (typeof FILE_ROLES)[number];
 
-export const IMPORT_KINDS = [
-  "static",
-  "re-export",
-  "dynamic",
-  "require",
-  "type-only"
-] as const;
+export const IMPORT_KINDS = ["static", "re-export", "dynamic", "require", "type-only"] as const;
 
 export type ImportKind = (typeof IMPORT_KINDS)[number];
 
@@ -29,12 +17,7 @@ export const IMPORT_RESOLUTIONS = [
 
 export type ImportResolution = (typeof IMPORT_RESOLUTIONS)[number];
 
-export const COMPONENT_KINDS = [
-  "package",
-  "folder",
-  "configured",
-  "root"
-] as const;
+export const COMPONENT_KINDS = ["package", "folder", "configured", "root"] as const;
 
 export type ComponentKind = (typeof COMPONENT_KINDS)[number];
 

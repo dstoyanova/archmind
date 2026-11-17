@@ -52,7 +52,7 @@ pnpm test
 pnpm format:check
 ```
 
-Node.js 22 or newer is required (see `.nvmrc`). `pnpm format` rewrites files with Prettier; `pnpm format:check` is not part of CI yet because existing files still need formatting.
+Node.js 22 or newer is required (see `.nvmrc`). `pnpm format` rewrites files with Prettier; CI runs `pnpm format:check`.
 
 ## CLI analysis
 

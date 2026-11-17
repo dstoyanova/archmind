@@ -279,11 +279,7 @@ function mapToVisibleAncestor(
   return visibleId;
 }
 
-function incrementCount(
-  record: Record<string, number>,
-  key: string,
-  increment = 1
-): void {
+function incrementCount(record: Record<string, number>, key: string, increment = 1): void {
   record[key] = (record[key] ?? 0) + increment;
 }
 
@@ -295,10 +291,7 @@ function compareComponents(a: ArchitectureComponent, b: ArchitectureComponent): 
   return compareStrings(a.id, b.id);
 }
 
-function compareProjectedDependencies(
-  a: ProjectedDependency,
-  b: ProjectedDependency
-): number {
+function compareProjectedDependencies(a: ProjectedDependency, b: ProjectedDependency): number {
   if (a.fromComponentId !== b.fromComponentId) {
     return compareStrings(a.fromComponentId, b.fromComponentId);
   }

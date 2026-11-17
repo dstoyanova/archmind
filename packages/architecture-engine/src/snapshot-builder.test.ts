@@ -197,9 +197,7 @@ describe("buildArchitectureSnapshot", () => {
     expect(first.files.find((file) => file.path === "packages/lib/src/a.ts")?.parseStatus).toBe(
       "parse-error"
     );
-    expect(
-      first.components.every((component) => component.id.startsWith("cmp:"))
-    ).toBe(true);
+    expect(first.components.every((component) => component.id.startsWith("cmp:"))).toBe(true);
 
     expect(architectureSnapshotSchema.parse(first).contentHash).toBe(first.contentHash);
   });

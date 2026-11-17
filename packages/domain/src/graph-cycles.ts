@@ -100,7 +100,9 @@ export function findCycles(graph: DirectedGraph): string[][] {
 }
 
 function buildAdjacency(graph: DirectedGraph): Map<string, string[]> {
-  const adjacency = new Map<string, Set<string>>(graph.nodes.map((node) => [node, new Set<string>()]));
+  const adjacency = new Map<string, Set<string>>(
+    graph.nodes.map((node) => [node, new Set<string>()])
+  );
   for (const edge of graph.edges) {
     if (adjacency.has(edge.to)) {
       adjacency.get(edge.from)?.add(edge.to);

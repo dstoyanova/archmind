@@ -179,12 +179,7 @@ function findNearestTsConfigOptions(filePath, tsConfigByDirectory) {
 
 async function extractImports(absolutePath, relativePath) {
   const sourceText = await readFile(absolutePath, "utf8");
-  const sourceFile = ts.createSourceFile(
-    relativePath,
-    sourceText,
-    ts.ScriptTarget.Latest,
-    true
-  );
+  const sourceFile = ts.createSourceFile(relativePath, sourceText, ts.ScriptTarget.Latest, true);
   const imports = [];
   const visit = (node) => {
     if (ts.isImportDeclaration(node) && ts.isStringLiteralLike(node.moduleSpecifier)) {
@@ -199,7 +194,11 @@ async function extractImports(absolutePath, relativePath) {
       imports.push(node.moduleSpecifier.text);
     }
 
-    if (ts.isCallExpression(node) && node.arguments[0] && ts.isStringLiteralLike(node.arguments[0])) {
+    if (
+      ts.isCallExpression(node) &&
+      node.arguments[0] &&
+      ts.isStringLiteralLike(node.arguments[0])
+    ) {
       if (
         node.expression.kind === ts.SyntaxKind.ImportKeyword ||
         (ts.isIdentifier(node.expression) && node.expression.text === "require")
@@ -217,11 +216,7 @@ async function extractImports(absolutePath, relativePath) {
 
 function toRepositoryRelativePath(repositoryRootPath, targetPath) {
   const relative = path.relative(repositoryRootPath, targetPath);
-  if (
-    relative.startsWith(`..${path.sep}`) ||
-    relative === ".." ||
-    path.isAbsolute(relative)
-  ) {
+  if (relative.startsWith(`..${path.sep}`) || relative === ".." || path.isAbsolute(relative)) {
     return null;
   }
 

@@ -53,7 +53,10 @@ export async function discoverRepositoryFiles(repositoryRoot: string): Promise<S
   const visit = async (directory: string): Promise<void> => {
     const entries = await readdir(directory, { withFileTypes: true });
     entries.sort((left, right) => compareStrings(left.name, right.name));
-    const isPackageOrRepositoryRoot = isRepositoryOrPackageRoot(directory === repositoryRoot, entries);
+    const isPackageOrRepositoryRoot = isRepositoryOrPackageRoot(
+      directory === repositoryRoot,
+      entries
+    );
 
     for (const entry of entries) {
       const absolutePath = path.join(directory, entry.name);

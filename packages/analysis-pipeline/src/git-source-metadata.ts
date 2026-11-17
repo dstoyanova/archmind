@@ -8,7 +8,13 @@ const GIT_TIMEOUT_MS = 2000;
 // Exit code git uses for "fatal" errors such as running outside a work tree.
 const GIT_FATAL_EXIT_CODE = 128;
 // Prevents a hostile `.git/config` from running commands (for example `core.fsmonitor`) in the analysed repository.
-const GIT_SAFETY_OPTIONS = ["--no-pager", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"];
+const GIT_SAFETY_OPTIONS = [
+  "--no-pager",
+  "-c",
+  "core.fsmonitor=false",
+  "-c",
+  "core.hooksPath=/dev/null"
+];
 
 export interface GitSourceMetadata {
   commitSha?: string | undefined;
@@ -124,8 +130,6 @@ function describeGitFailure(error: unknown): string {
   return "failed";
 }
 
-function isExecError(
-  error: unknown
-): error is { code?: string | number; killed?: boolean } {
+function isExecError(error: unknown): error is { code?: string | number; killed?: boolean } {
   return typeof error === "object" && error !== null;
 }

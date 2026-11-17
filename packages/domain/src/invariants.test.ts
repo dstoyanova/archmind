@@ -112,7 +112,14 @@ describe("validateSnapshotInvariants", () => {
 
   it("reports dangling import, symbol, evidence and cycle references", () => {
     const snapshot = createValidSnapshot();
-    snapshot.symbols.push({ id: "s-1", fileId: "missing-file", name: "x", kind: "function", line: 1, column: 1 });
+    snapshot.symbols.push({
+      id: "s-1",
+      fileId: "missing-file",
+      name: "x",
+      kind: "function",
+      line: 1,
+      column: 1
+    });
     snapshot.fileImports.push({
       id: "i-1",
       fromFileId: "missing-file",
@@ -135,7 +142,11 @@ describe("validateSnapshotInvariants", () => {
     });
     snapshot.cycles.push(
       { level: { kind: "file" }, memberIds: ["f-1", "ghost-file"], typeOnly: false },
-      { level: { kind: "depth", depth: 1 }, memberIds: ["root", "ghost-component"], typeOnly: false }
+      {
+        level: { kind: "depth", depth: 1 },
+        memberIds: ["root", "ghost-component"],
+        typeOnly: false
+      }
     );
 
     const errors = validateSnapshotInvariants(snapshot);

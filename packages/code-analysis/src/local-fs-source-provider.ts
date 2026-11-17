@@ -47,21 +47,20 @@ const GENERATED_FILE_PATTERNS = [
 
 const ROLE_ORDER: FileRole[] = ["test", "story", "script", "config", "source"];
 
-const DEFAULT_ROLE_PATTERNS: Readonly<Record<Exclude<FileRole, "source">, string[]>> =
-  {
-    test: [
-      "*.test.*",
-      "*.spec.*",
-      "__tests__/**",
-      "__mocks__/**",
-      "**/test/**",
-      "**/tests/**",
-      "**/e2e/**"
-    ],
-    story: ["*.stories.*"],
-    script: ["scripts/**", "**/scripts/**"],
-    config: ["*.config.*", ".*rc.*"]
-  };
+const DEFAULT_ROLE_PATTERNS: Readonly<Record<Exclude<FileRole, "source">, string[]>> = {
+  test: [
+    "*.test.*",
+    "*.spec.*",
+    "__tests__/**",
+    "__mocks__/**",
+    "**/test/**",
+    "**/tests/**",
+    "**/e2e/**"
+  ],
+  story: ["*.stories.*"],
+  script: ["scripts/**", "**/scripts/**"],
+  config: ["*.config.*", ".*rc.*"]
+};
 
 const MINIMATCH_OPTIONS = {
   dot: true,
@@ -233,12 +232,13 @@ export class LocalFsSourceProvider implements SourceProvider {
     }
 
     const content = await readFile(path.join(directory, GITIGNORE_FILE_NAME), "utf8");
-    return [...inheritedScopes, { baseDirectory: relativeDirectory, matcher: ignore().add(content) }];
+    return [
+      ...inheritedScopes,
+      { baseDirectory: relativeDirectory, matcher: ignore().add(content) }
+    ];
   }
 
-  private resolveLimits(
-    inputLimits?: Partial<SourceProviderLimits>
-  ): SourceProviderLimits {
+  private resolveLimits(inputLimits?: Partial<SourceProviderLimits>): SourceProviderLimits {
     return {
       maxFileBytes: inputLimits?.maxFileBytes ?? DEFAULT_SOURCE_PROVIDER_LIMITS.maxFileBytes
     };
@@ -330,9 +330,7 @@ function classifyFileRole(
     }
 
     const patterns = rolePatterns[role];
-    if (
-      patterns.some((pattern) => minimatch(filePath, pattern, MINIMATCH_OPTIONS))
-    ) {
+    if (patterns.some((pattern) => minimatch(filePath, pattern, MINIMATCH_OPTIONS))) {
       return role;
     }
   }
@@ -350,9 +348,7 @@ function isAnalysableSourceFile(filePath: string): boolean {
 }
 
 function isGeneratedFile(filePath: string): boolean {
-  return GENERATED_FILE_PATTERNS.some((pattern) =>
-    minimatch(filePath, pattern, MINIMATCH_OPTIONS)
-  );
+  return GENERATED_FILE_PATTERNS.some((pattern) => minimatch(filePath, pattern, MINIMATCH_OPTIONS));
 }
 
 function createSourceHash(
@@ -379,4 +375,3 @@ function sha256(value: BinaryLike): string {
 function toPosixPath(filePath: string): string {
   return filePath.split(path.sep).join(path.posix.sep);
 }
-

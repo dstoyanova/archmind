@@ -36,7 +36,9 @@ describe("analyzeRepository workspace handling", () => {
 
     const { snapshot } = await analyzeRepository({ repositoryRoot: root });
 
-    const packageComponents = snapshot.components.filter((component) => component.kind === "package");
+    const packageComponents = snapshot.components.filter(
+      (component) => component.kind === "package"
+    );
     expect(packageComponents.flatMap((component) => component.paths).sort()).toEqual([
       ".",
       "packages/a"
@@ -66,7 +68,10 @@ describe("analyzeRepository workspace handling", () => {
     await writeRepoFile("packages/b/package.json", JSON.stringify({ name: "@x/dup" }));
     await writeRepoFile("packages/b/src/index.ts", "export const b = 1;\n");
     await writeRepoFile("packages/c/package.json", JSON.stringify({ name: "@x/c" }));
-    await writeRepoFile("packages/c/src/index.ts", "import { a } from '@x/dup';\nexport const c = a;\n");
+    await writeRepoFile(
+      "packages/c/src/index.ts",
+      "import { a } from '@x/dup';\nexport const c = a;\n"
+    );
 
     const { snapshot } = await analyzeRepository({ repositoryRoot: root });
 
@@ -77,9 +82,13 @@ describe("analyzeRepository workspace handling", () => {
         message: expect.stringContaining('imports of it resolve to "packages/a"')
       })
     ]);
-    const componentById = new Map(snapshot.components.map((component) => [component.id, component]));
+    const componentById = new Map(
+      snapshot.components.map((component) => [component.id, component])
+    );
     const importTargets = snapshot.dependencies
-      .filter((dependency) => componentById.get(dependency.fromComponentId)?.paths.includes("packages/c"))
+      .filter((dependency) =>
+        componentById.get(dependency.fromComponentId)?.paths.includes("packages/c")
+      )
       .map((dependency) => componentById.get(dependency.toComponentId)?.paths);
     expect(importTargets).toEqual([["packages/a"]]);
   });
@@ -87,7 +96,10 @@ describe("analyzeRepository workspace handling", () => {
 
 describe("analyzeRepository configuration", () => {
   it("reports invalid configuration readably instead of throwing a raw ZodError", async () => {
-    await writeRepoFile("archmind.config.json", JSON.stringify({ analysis: { components: "nope" } }));
+    await writeRepoFile(
+      "archmind.config.json",
+      JSON.stringify({ analysis: { components: "nope" } })
+    );
 
     await expect(analyzeRepository({ repositoryRoot: root })).rejects.toThrow(
       /Invalid "archmind\.config\.json":\n- analysis\.components: /u
@@ -95,7 +107,10 @@ describe("analyzeRepository configuration", () => {
   });
 
   it("rejects misspelled analysis keys", async () => {
-    await writeRepoFile("archmind.config.json", JSON.stringify({ analysis: { componentRoot: {} } }));
+    await writeRepoFile(
+      "archmind.config.json",
+      JSON.stringify({ analysis: { componentRoot: {} } })
+    );
 
     await expect(analyzeRepository({ repositoryRoot: root })).rejects.toThrow(/componentRoot/u);
   });
@@ -103,7 +118,9 @@ describe("analyzeRepository configuration", () => {
   it("reports an unknown configured parent as a diagnostic", async () => {
     await writeRepoFile(
       "archmind.config.json",
-      JSON.stringify({ analysis: { components: [{ name: "x", paths: ["src/**"], parent: "nope" }] } })
+      JSON.stringify({
+        analysis: { components: [{ name: "x", paths: ["src/**"], parent: "nope" }] }
+      })
     );
     await writeRepoFile("src/index.ts", "export const a = 1;\n");
 
@@ -119,7 +136,10 @@ describe("analyzeRepository output guard", () => {
   // When this fails, analysis output changed. Bump ENGINE_VERSION in
   // @archmind/architecture-engine, then update the golden values.
   it("changes contentHash only together with the engine or parser version", async () => {
-    await writeRepoFile("package.json", JSON.stringify({ name: "guard-root", workspaces: ["packages/*"] }));
+    await writeRepoFile(
+      "package.json",
+      JSON.stringify({ name: "guard-root", workspaces: ["packages/*"] })
+    );
     await writeRepoFile("packages/a/package.json", JSON.stringify({ name: "@guard/a" }));
     await writeRepoFile(
       "packages/a/src/index.ts",

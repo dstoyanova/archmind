@@ -1,7 +1,10 @@
 import type { ArchitectureSnapshot } from "@archmind/domain";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
-import { architectureSnapshotSchema, type ArchitectureSnapshotDocument } from "./snapshot-schema.js";
+import {
+  architectureSnapshotSchema,
+  type ArchitectureSnapshotDocument
+} from "./snapshot-schema.js";
 
 describe("snapshot schema and domain model", () => {
   it("describe the same snapshot shape", () => {
@@ -82,18 +85,27 @@ describe("architectureSnapshotSchema", () => {
   });
 
   it.each([
-    ["an unknown parseStatus", (snapshot: ReturnType<typeof createValidSnapshot>) => ({
-      ...snapshot,
-      files: [{ ...snapshot.files[0], parseStatus: "weird" }]
-    })],
-    ["an unresolvedRate above 1", (snapshot: ReturnType<typeof createValidSnapshot>) => ({
-      ...snapshot,
-      resolutionStats: { countsByResolution: {}, unresolvedRate: 1.5 }
-    })],
-    ["a createdAt that is not a datetime", (snapshot: ReturnType<typeof createValidSnapshot>) => ({
-      ...snapshot,
-      createdAt: "yesterday"
-    })]
+    [
+      "an unknown parseStatus",
+      (snapshot: ReturnType<typeof createValidSnapshot>) => ({
+        ...snapshot,
+        files: [{ ...snapshot.files[0], parseStatus: "weird" }]
+      })
+    ],
+    [
+      "an unresolvedRate above 1",
+      (snapshot: ReturnType<typeof createValidSnapshot>) => ({
+        ...snapshot,
+        resolutionStats: { countsByResolution: {}, unresolvedRate: 1.5 }
+      })
+    ],
+    [
+      "a createdAt that is not a datetime",
+      (snapshot: ReturnType<typeof createValidSnapshot>) => ({
+        ...snapshot,
+        createdAt: "yesterday"
+      })
+    ]
   ])("rejects %s", (_name, mutate) => {
     expect(architectureSnapshotSchema.safeParse(mutate(createValidSnapshot())).success).toBe(false);
   });

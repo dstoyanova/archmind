@@ -80,13 +80,7 @@ export function mapFilesToComponentHierarchy(
     componentById
   );
 
-  createFolderComponents(
-    packageContexts,
-    filePaths,
-    packageDirectories,
-    components,
-    componentById
-  );
+  createFolderComponents(packageContexts, filePaths, packageDirectories, components, componentById);
 
   const diagnostics: HierarchyDiagnostic[] = [];
   const configuredComponents = createConfiguredComponents(
@@ -163,11 +157,7 @@ function createPackageComponents(
 
   for (const packageDirectory of packageDirectories) {
     const componentId = buildComponentId("package", packageDirectory);
-    const componentRootPath = resolveComponentRootPath(
-      packageDirectory,
-      filePaths,
-      analysisConfig
-    );
+    const componentRootPath = resolveComponentRootPath(packageDirectory, filePaths, analysisConfig);
     const component: InternalComponent = {
       id: componentId,
       name: packageDirectory === "." ? "<package-root>" : basename(packageDirectory),
@@ -199,7 +189,8 @@ function createFolderComponents(
 ): void {
   for (const pkg of packageContexts) {
     const ownedFilePaths = filePaths.filter(
-      (filePath) => findOwningPackageDirectory(filePath, packageDirectories) === pkg.packageDirectory
+      (filePath) =>
+        findOwningPackageDirectory(filePath, packageDirectories) === pkg.packageDirectory
     );
     const childFolders = findImmediateFoldersUnderRoot(ownedFilePaths, pkg.componentRootPath);
     for (const folderPath of childFolders) {
@@ -262,7 +253,9 @@ function createConfiguredComponents(
     const rootCause = configured.find(
       (entry) =>
         pending.has(entry.name) &&
-        (entry.parent === undefined || !pending.has(entry.parent) || isOnParentCycle(entry, pending))
+        (entry.parent === undefined ||
+          !pending.has(entry.parent) ||
+          isOnParentCycle(entry, pending))
     );
     if (!rootCause) {
       break;
@@ -360,10 +353,7 @@ function findConfiguredMatch(
   return matches[0] ?? null;
 }
 
-function findOwningPackageDirectory(
-  filePath: string,
-  packageDirectories: string[]
-): string | null {
+function findOwningPackageDirectory(filePath: string, packageDirectories: string[]): string | null {
   const matches = packageDirectories
     .filter((directory) => containsPath(directory, filePath))
     .sort((left, right) => right.length - left.length || compareStrings(left, right));

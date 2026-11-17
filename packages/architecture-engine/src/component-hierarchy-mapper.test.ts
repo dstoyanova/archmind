@@ -164,7 +164,8 @@ describe("mapFilesToComponentHierarchy", () => {
       "CONFIG_COMPONENT_PARENT_CYCLE",
       "CONFIG_COMPONENT_PARENT_UNKNOWN"
     ]);
-    const parentOf = (id: string) => result.components.find((component) => component.id === id)?.parentId;
+    const parentOf = (id: string) =>
+      result.components.find((component) => component.id === id)?.parentId;
     expect(parentOf("configured:orphan")).toBe("root");
     expect(parentOf("configured:child-of-orphan")).toBe("configured:orphan");
     expect(parentOf("configured:loop-a")).toBe("root");
