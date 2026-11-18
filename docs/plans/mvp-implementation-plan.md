@@ -398,11 +398,12 @@ All tenant data is served under `/api/workspaces/:workspaceId/...` from M2 onwar
 Conventions:
 
 - Errors use a consistent `{ error: { code, message, details? } }` shape.
-- Collections use cursor pagination.
+- Paginated collections accept an optional `cursor` and a `limit` (default 50, maximum 100) and return `{ items, nextCursor }`; `nextCursor` is `null` on the last page.
 - Requests are validated with zod-based pipes.
-- OpenAPI is generated from the zod contracts and served at `/api/docs`.
-- Graph endpoints default to the production graph (`roles=source`, type-only imports included). Graph responses carry counts, not evidence; evidence is fetched per edge and paginated.
-- Snapshot IDs do not depend on `contentHash`, because several snapshots can share one content hash from M4.
+- Generate the explorer OpenAPI document with `pnpm --silent --filter @archmind/contracts openapi:explorer`. The API will serve this document at `/api/docs` (M2.3).
+- Component graph requests default to depth 1 and the production graph (`roles=source`, type-only imports included). Use repeated `expand` and `roles` query parameters for lists. Component detail and dependency evidence accept the same projection options as the graph, so their edges match the visible graph. Evidence uses `from` and `to` component IDs plus the projection options and pagination.
+- Component graph responses carry counts, not evidence. External package counts are broken down by role only; snapshot external totals do not track import kinds. File graph requests require `level=file` and `componentId`.
+- Snapshot IDs are opaque and supplied by the reader, independent of `contentHash`. List entries include a reader-supplied display label and, for readable snapshots, existing source metadata and creation time. No `source.repositoryName` is added to the snapshot format.
 
 ### 4.12 AI assistant
 

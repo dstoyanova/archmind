@@ -16,12 +16,12 @@ const nonNegativeInt = z.number().int().nonnegative();
 const nonNegativeNumber = z.number().nonnegative();
 const positiveInt = z.number().int().positive();
 
-const fileRoleSchema = z.enum(FILE_ROLES);
-const importKindSchema = z.enum(IMPORT_KINDS);
+export const fileRoleSchema = z.enum(FILE_ROLES);
+export const importKindSchema = z.enum(IMPORT_KINDS);
 const importResolutionSchema = z.enum(IMPORT_RESOLUTIONS);
 
-const countsByKindSchema = z.record(importKindSchema, nonNegativeInt);
-const countsByRoleSchema = z.record(fileRoleSchema, nonNegativeInt);
+export const countsByKindSchema = z.record(importKindSchema, nonNegativeInt);
+export const countsByRoleSchema = z.record(fileRoleSchema, nonNegativeInt);
 const countsByResolutionSchema = z.record(importResolutionSchema, nonNegativeInt);
 
 const componentMetricsSchema = z.object({
@@ -32,7 +32,7 @@ const componentMetricsSchema = z.object({
   instability: nonNegativeNumber
 });
 
-const architectureComponentSchema = z.object({
+export const architectureComponentSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   parentId: z.string().min(1).optional(),
@@ -42,7 +42,7 @@ const architectureComponentSchema = z.object({
   metrics: componentMetricsSchema
 });
 
-const architectureFileSchema = z.object({
+export const architectureFileSchema = z.object({
   id: z.string().min(1),
   path: z.string().min(1),
   componentId: z.string().min(1),
@@ -84,7 +84,7 @@ const dependencySchema = z.object({
   evidenceImportIds: z.array(z.string().min(1))
 });
 
-const externalDependencySchema = z.object({
+export const externalDependencySchema = z.object({
   componentId: z.string().min(1),
   packageName: z.string().min(1),
   weight: nonNegativeInt,
@@ -107,12 +107,12 @@ const cycleSchema = z.object({
   typeOnly: z.boolean()
 });
 
-const resolutionStatsSchema = z.object({
+export const resolutionStatsSchema = z.object({
   countsByResolution: countsByResolutionSchema,
   unresolvedRate: z.number().min(0).max(1)
 });
 
-const diagnosticSchema = z.object({
+export const diagnosticSchema = z.object({
   severity: z.enum(DIAGNOSTIC_SEVERITIES),
   code: z.string().min(1),
   message: z.string().min(1),
@@ -120,7 +120,7 @@ const diagnosticSchema = z.object({
   line: positiveInt.optional()
 });
 
-const snapshotSourceSchema = z.object({
+export const snapshotSourceSchema = z.object({
   kind: z.enum(SOURCE_KINDS),
   sourceHash: z.string().min(1),
   commitSha: z.string().min(1).optional(),

@@ -42,3 +42,9 @@ Adopt **zod** as the contract and runtime validation library.
 
 - Requires discipline to avoid duplicating business logic in schemas.
 - Team must align on zod patterns for error formatting and evolution.
+
+## Addendum (2026-11-18): explorer request validation and OpenAPI
+
+Approved for M2. Use `nestjs-zod` 5.x with NestJS 10 or 11 for request validation in `apps/api` (M2.3). Use `@asteasolutions/zod-to-openapi` 7.x to generate OpenAPI from the shared Zod schemas in `packages/contracts`. Both support the existing Zod 3.25 dependency. The contracts package does not depend on NestJS.
+
+The generated OpenAPI document describes the explorer routes and their request, response and error schemas. The API will serve that same document at `/api/docs`; Nest DTOs and decorators are not a second source of OpenAPI schemas. The API will map validation failures to the shared error envelope.

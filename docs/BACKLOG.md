@@ -127,13 +127,13 @@ Define zod view models for the snapshot list and overview, the projected compone
 
 - **Depends on:** M2.1
 - **Acceptance criteria:**
-  - [ ] Graph requests support depth, expanded components, role filters and the type-only toggle. The default is the production graph (`source` files, type-only imports included), so the default view matches the stored metrics and cycles.
-  - [ ] The graph response contains the cycles of the projected graph and, per edge, the weight and counts by kind and role. It contains no evidence import IDs. External dependencies of visible components are included, so the UI can filter internal and external dependencies (FR-E2).
-  - [ ] Projected edges are addressed by their endpoints, because they have no stored ID. Evidence is a cursor-paginated list of `{ filePath, line, column, specifier, kind, role }`, the compact shape M4 stores. Component file lists and diagnostics are also paginated.
-  - [ ] Component metrics are described as production-graph values at the component's own depth, unaffected by filters.
-  - [ ] Snapshot IDs do not depend on `contentHash`, because several M4 snapshots can share one. The snapshot list shows enough to tell snapshots apart. Decide whether to add a non-hashed `source.repositoryName`. If added, record it in an ADR-0004 addendum.
-  - [ ] Errors use `{ error: { code, message, details? } }`.
-  - [ ] Unit tests cover the mappings.
+  - [x] Graph requests support depth, expanded components, role filters and the type-only toggle. The default is the production graph (`source` files, type-only imports included), so the default view matches the stored metrics and cycles.
+  - [x] The graph response contains the cycles of the projected graph and, per edge, the weight and counts by kind and role. It contains no evidence import IDs. External dependencies of visible components are included, so the UI can filter internal and external dependencies (FR-E2).
+  - [x] Projected edges are addressed by their endpoints, because they have no stored ID. Evidence is a cursor-paginated list of `{ filePath, line, column, specifier, kind, role }`, the compact shape M4 stores. Component file lists and diagnostics are also paginated.
+  - [x] Component metrics are described as production-graph values at the component's own depth, unaffected by filters.
+  - [x] Snapshot IDs do not depend on `contentHash`, because several M4 snapshots can share one. The snapshot list shows enough to tell snapshots apart. The reader supplies the display label, so no `source.repositoryName` is added.
+  - [x] Errors use `{ error: { code, message, details? } }`.
+  - [x] Unit tests cover the mappings.
 
 ### M2.3 Create the read-only explorer API ⚠ Approval (ADR-0001 addendum)
 

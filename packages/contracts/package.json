@@ -4,15 +4,18 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./explorer-openapi": "./src/explorer-openapi.ts"
   },
   "scripts": {
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --project tsconfig.json --noEmit",
-    "test": "vitest run --config ../../vitest.config.ts"
+    "test": "vitest run --config ../../vitest.config.ts",
+    "openapi:explorer": "tsx src/print-explorer-openapi.ts"
   },
   "dependencies": {
     "@archmind/domain": "workspace:*",
+    "@asteasolutions/zod-to-openapi": "^7.3.4",
     "zod": "^3.25.76"
   }
 }
