@@ -114,10 +114,10 @@ Add the graph functions the explorer needs to `packages/domain`, so the API, the
 
 - **Depends on:** M1.7
 - **Acceptance criteria:**
-  - [ ] Cycles, with the `typeOnly` flag, can be computed for any projected graph: any depth, expanded set and filters. `architecture-engine` uses the same function, and snapshot output is unchanged (the golden `contentHash` test still passes).
-  - [ ] A file-level projection for a component returns the files in its subtree and the imports between them. Imports into other components become edges to those components as currently projected.
-  - [ ] A snapshot can be validated and indexed once and then projected many times, instead of `projectGraph` re-checking invariants and rebuilding indexes on every call.
-  - [ ] Unit tests cover a cycle that appears only after expanding a component, cycles removed by role and type-only filters, and the file-level projection.
+  - [x] Cycles, with the `typeOnly` flag, can be computed for any projected graph: any depth, expanded set and filters. `architecture-engine` uses the same function, and snapshot output is unchanged (the golden `contentHash` test still passes).
+  - [x] A file-level projection for a component returns the files in its subtree and the imports between them. Imports into other components become edges to those components as currently projected.
+  - [x] A snapshot can be validated and indexed once and then projected many times, instead of `projectGraph` re-checking invariants and rebuilding indexes on every call.
+  - [x] Unit tests cover a cycle that appears only after expanding a component, cycles removed by role and type-only filters, and the file-level projection.
 
 ### M2.2 Define explorer API contracts ⚠ Approval (ADR-0003 addendum)
 

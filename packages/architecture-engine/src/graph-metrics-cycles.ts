@@ -1,9 +1,10 @@
 import type { ArchitectureSnapshotDocument } from "@archmind/contracts";
 import {
   compareStrings,
-  findCycles,
+  findTypedCycles,
   projectEdgesToDepth,
-  type ProjectedHierarchyEdge
+  type ProjectedHierarchyEdge,
+  type TypedDirectedEdge
 } from "@archmind/domain";
 
 type SnapshotComponent = ArchitectureSnapshotDocument["components"][number];
@@ -43,12 +44,6 @@ interface ProductionComponentEdge {
   typeOnly: boolean;
 }
 
-interface FileEdge {
-  from: string;
-  to: string;
-  typeOnly: boolean;
-}
-
 export function buildGraphMetricsAndCycles(
   input: BuildGraphMetricsAndCyclesInput
 ): BuildGraphMetricsAndCyclesResult {
@@ -59,7 +54,7 @@ export function buildGraphMetricsAndCycles(
 
   const dependencyEvidenceByEdge = new Map<string, ComponentEdgeEvidence[]>();
   const productionComponentEdges: ProductionComponentEdge[] = [];
-  const productionFileEdges: FileEdge[] = [];
+  const productionFileEdges: TypedDirectedEdge[] = [];
   const externalDependencyEvidence = new Map<string, Map<FileRole, number>>();
 
   for (const fileImport of input.fileImports) {
@@ -281,11 +276,10 @@ function buildDepthCycles(
       .sort(compareStrings);
     const edges = projectEdgesToDepth(components, productionComponentEdges, depth);
 
-    for (const members of findCycles({ nodes, edges })) {
+    for (const cycle of findTypedCycles({ nodes, edges })) {
       cycles.push({
         level: { kind: "depth", depth },
-        memberIds: members,
-        typeOnly: !hasRuntimeCycle(members, edges)
+        ...cycle
       });
     }
   }
@@ -293,35 +287,21 @@ function buildDepthCycles(
   return cycles.sort(compareCycles);
 }
 
-function buildFileCycles(files: SnapshotFile[], fileEdges: FileEdge[]): SnapshotCycle[] {
+function buildFileCycles(files: SnapshotFile[], fileEdges: TypedDirectedEdge[]): SnapshotCycle[] {
   const nodes = files
     .filter((file) => file.role === "source")
     .map((file) => file.id)
     .sort(compareStrings);
 
-  return findCycles({ nodes, edges: fileEdges })
+  return findTypedCycles({ nodes, edges: fileEdges })
     .map(
-      (members) =>
+      (cycle) =>
         ({
           level: { kind: "file" },
-          memberIds: members,
-          typeOnly: !hasRuntimeCycle(members, fileEdges)
+          ...cycle
         }) satisfies SnapshotCycle
     )
     .sort(compareCycles);
-}
-
-/** A cycle is runtime when its members still form a cycle using only non-type-only edges. */
-function hasRuntimeCycle(
-  members: readonly string[],
-  edges: ReadonlyArray<{ from: string; to: string; typeOnly: boolean }>
-): boolean {
-  const memberSet = new Set(members);
-  const runtimeEdges = edges.filter(
-    (edge) => !edge.typeOnly && memberSet.has(edge.from) && memberSet.has(edge.to)
-  );
-
-  return findCycles({ nodes: members, edges: runtimeEdges }).length > 0;
 }
 
 function buildChildrenById(components: GraphComponentInput[]): Map<string, string[]> {

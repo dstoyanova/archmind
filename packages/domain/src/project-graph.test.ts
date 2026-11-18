@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import * as invariants from "./invariants.js";
 import type { ArchitectureSnapshot } from "./model.js";
-import { projectGraph } from "./project-graph.js";
+import { createSnapshotProjector, projectGraph } from "./project-graph.js";
 
 function createSnapshot(): ArchitectureSnapshot {
   return {
@@ -241,5 +242,150 @@ describe("projectGraph", () => {
         countsByRole: { source: 1 }
       }
     ]);
+  });
+
+  it("finds cycles after expansion and removes them under either role or type-only filters", () => {
+    const snapshot = createSnapshot();
+    snapshot.fileImports.push({
+      id: "i-c-a",
+      fromFileId: "f-c",
+      toFileId: "f-a",
+      specifier: "../a/a",
+      kind: "static",
+      resolution: "internal-file",
+      line: 1,
+      column: 1
+    });
+    snapshot.dependencies.push({
+      id: "d-c-a",
+      fromComponentId: "c",
+      toComponentId: "a",
+      weight: 1,
+      countsByKind: { static: 1 },
+      countsByRole: { source: 1 },
+      evidenceImportIds: ["i-c-a"]
+    });
+
+    const projector = createSnapshotProjector(snapshot);
+    const options = { depth: 1, expanded: ["pkg"] };
+
+    expect(projector.projectGraph({ depth: 1 }).cycles).toEqual([]);
+    expect(projector.projectGraph(options).cycles).toEqual([
+      { memberIds: ["a", "b", "c"], typeOnly: true }
+    ]);
+    expect(
+      projector.projectGraph({ ...options, filters: { includeFileRoles: ["source"] } }).cycles
+    ).toEqual([]);
+    expect(
+      projector.projectGraph({ ...options, filters: { includeTypeOnly: false } }).cycles
+    ).toEqual([]);
+  });
+});
+
+describe("createSnapshotProjector", () => {
+  it("validates once for repeated component and file projections", () => {
+    const validate = vi.spyOn(invariants, "assertSnapshotInvariants");
+    try {
+      const projector = createSnapshotProjector(createSnapshot());
+      projector.projectGraph({ depth: 1 });
+      projector.projectGraph({ depth: 2 });
+      projector.projectFileGraph("a", { depth: 1 });
+      expect(validate).toHaveBeenCalledTimes(1);
+    } finally {
+      validate.mockRestore();
+    }
+  });
+
+  it("rejects invalid snapshots before projecting", () => {
+    const snapshot = createSnapshot();
+    snapshot.files = [];
+    expect(() => createSnapshotProjector(snapshot)).toThrow("IMPORT_REFERENCE_MISSING");
+  });
+});
+
+describe("projectFileGraph", () => {
+  it("keeps subtree imports as file edges and maps outgoing targets to visible components", () => {
+    const snapshot = createSnapshot();
+    const entryFile = {
+      id: "f-pkg",
+      path: "packages/pkg/index.ts",
+      componentId: "pkg",
+      role: "source",
+      language: "ts",
+      loc: 1,
+      parseStatus: "parsed"
+    } as const;
+    snapshot.files.unshift(entryFile);
+    snapshot.fileImports.push(
+      {
+        id: "i-pkg-a",
+        fromFileId: entryFile.id,
+        toFileId: "f-a",
+        specifier: "./src/a/a",
+        kind: "re-export",
+        resolution: "internal-file",
+        line: 1,
+        column: 1
+      },
+      {
+        id: "i-b-package",
+        fromFileId: "f-b",
+        toComponentId: "pkg",
+        specifier: "pkg",
+        kind: "static",
+        resolution: "workspace-package",
+        line: 3,
+        column: 1
+      },
+      {
+        id: "i-b-external",
+        fromFileId: "f-b",
+        externalPackage: "vitest",
+        specifier: "vitest",
+        kind: "static",
+        resolution: "external-package",
+        line: 1,
+        column: 1
+      }
+    );
+    const projector = createSnapshotProjector(snapshot);
+    const subtree = projector.projectFileGraph("pkg", { depth: 1 });
+    const collapsed = projector.projectFileGraph("b", { depth: 1 });
+    const expanded = projector.projectFileGraph("b", { depth: 1, expanded: ["pkg"] });
+
+    expect(subtree.files.map((file) => file.id)).toEqual(["f-pkg", "f-a", "f-b", "f-c"]);
+    expect(subtree.imports.map(({ fileImport, target }) => [fileImport.id, target])).toEqual([
+      ["i-a-b", { kind: "file", fileId: "f-b" }],
+      ["i-b-c", { kind: "file", fileId: "f-c" }],
+      ["i-b-package", { kind: "component", componentId: "pkg" }],
+      ["i-pkg-a", { kind: "file", fileId: "f-a" }]
+    ]);
+    expect(collapsed.files.map((file) => file.id)).toEqual(["f-b"]);
+    expect(collapsed.components.map((component) => component.id)).toEqual(["pkg"]);
+    expect(collapsed.imports.map(({ target }) => target)).toEqual([
+      { kind: "component", componentId: "pkg" },
+      { kind: "component", componentId: "pkg" }
+    ]);
+    expect(expanded.components.map((component) => component.id)).toEqual(["pkg", "c"]);
+    expect(expanded.imports[0]).toMatchObject({
+      fileImport: { id: "i-b-c", line: 2, kind: "type-only" },
+      target: { kind: "component", componentId: "c" }
+    });
+    expect(
+      projector
+        .projectFileGraph("b", { depth: 2, filters: { includeTypeOnly: false } })
+        .imports.map(({ fileImport }) => fileImport.id)
+    ).toEqual(["i-b-package"]);
+    expect(
+      projector.projectFileGraph("b", { depth: 2, filters: { includeFileRoles: ["source"] } })
+        .imports
+    ).toEqual([]);
+  });
+
+  it("rejects unknown components", () => {
+    const projector = createSnapshotProjector(createSnapshot());
+    expect(() => projector.projectFileGraph("missing", { depth: 1 })).toThrow(
+      'unknown component "missing"'
+    );
   });
 });

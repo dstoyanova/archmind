@@ -1,5 +1,6 @@
 import type {
   ArchitectureComponent,
+  ArchitectureFile,
   ArchitectureSnapshot,
   ComponentDependency,
   CountsByKind,
@@ -9,19 +10,20 @@ import type {
   FileRole,
   ImportKind
 } from "./model.js";
+import { findTypedCycles, type GraphCycle } from "./graph-cycles.js";
 import { collectVisibleComponentIds, findVisibleAncestor } from "./hierarchy-projection.js";
 import { assertSnapshotInvariants } from "./invariants.js";
 import { compareStrings } from "./ordering.js";
 
 export interface ProjectGraphFilters {
-  includeFileRoles?: FileRole[];
-  includeImportKinds?: ImportKind[];
+  includeFileRoles?: readonly FileRole[];
+  includeImportKinds?: readonly ImportKind[];
   includeTypeOnly?: boolean;
 }
 
 export interface ProjectGraphOptions {
   depth: number;
-  expanded?: string[];
+  expanded?: readonly string[];
   filters?: ProjectGraphFilters;
 }
 
@@ -45,76 +47,206 @@ export interface ProjectedGraph {
   components: ArchitectureComponent[];
   dependencies: ProjectedDependency[];
   externalDependencies: ProjectedExternalDependency[];
+  cycles: GraphCycle[];
+}
+
+export type ProjectedFileImportTarget =
+  { kind: "file"; fileId: string } | { kind: "component"; componentId: string };
+
+export interface ProjectedFileImport {
+  fileImport: Readonly<FileImport>;
+  target: ProjectedFileImportTarget;
+}
+
+export interface ProjectedFileGraph {
+  files: Readonly<ArchitectureFile>[];
+  components: ArchitectureComponent[];
+  imports: ProjectedFileImport[];
+}
+
+export interface SnapshotProjector {
+  projectGraph(options: ProjectGraphOptions): ProjectedGraph;
+  projectFileGraph(componentId: string, options: ProjectGraphOptions): ProjectedFileGraph;
 }
 
 interface SnapshotIndexes {
   componentsById: Map<string, ArchitectureComponent>;
   parentById: Map<string, string | undefined>;
-  filesById: Map<string, ArchitectureSnapshot["files"][number]>;
+  childrenById: Map<string, ArchitectureComponent[]>;
+  filesById: Map<string, ArchitectureFile>;
+  filesByComponentId: Map<string, ArchitectureFile[]>;
   importsById: Map<string, FileImport>;
+  importsBySourceFileId: Map<string, FileImport[]>;
 }
-
-const DEFAULT_FILTERS: Required<ProjectGraphFilters> = {
-  includeFileRoles: [],
-  includeImportKinds: [],
-  includeTypeOnly: true
-};
 
 export function projectGraph(
   snapshot: ArchitectureSnapshot,
   options: ProjectGraphOptions
 ): ProjectedGraph {
+  return createSnapshotProjector(snapshot).projectGraph(options);
+}
+
+/** Validate domain invariants and index once. The snapshot and shared records must stay immutable. */
+export function createSnapshotProjector(snapshot: ArchitectureSnapshot): SnapshotProjector {
   assertSnapshotInvariants(snapshot);
-
-  const depth = Math.max(0, options.depth);
-  const expanded = new Set(options.expanded ?? []);
-  const filters = {
-    ...DEFAULT_FILTERS,
-    ...options.filters
-  };
-
   const indexes = buildIndexes(snapshot);
-  const visibleComponentIds = collectVisibleComponentIds(snapshot.components, depth, expanded);
-  const projectedComponents = snapshot.components
-    .filter((component) => visibleComponentIds.has(component.id))
-    .sort(compareComponents);
-
-  const projectedDependencies = projectDependencies(
-    snapshot.dependencies,
-    indexes,
-    visibleComponentIds,
-    filters
-  );
-
-  const projectedExternalDependencies = projectExternalDependencies(
-    snapshot.externalDependencies,
-    indexes,
-    visibleComponentIds,
-    filters
-  );
 
   return {
-    components: projectedComponents,
-    dependencies: projectedDependencies,
-    externalDependencies: projectedExternalDependencies
+    projectGraph(options) {
+      const visibleComponentIds = collectVisible(snapshot, options);
+      const components = snapshot.components
+        .filter((component) => visibleComponentIds.has(component.id))
+        .sort(compareComponents);
+      const dependencies = projectDependencies(
+        snapshot.dependencies,
+        indexes,
+        visibleComponentIds,
+        createImportFilter(options.filters)
+      );
+
+      return {
+        components,
+        dependencies,
+        externalDependencies: projectExternalDependencies(
+          snapshot.externalDependencies,
+          indexes,
+          visibleComponentIds,
+          new Set(options.filters?.includeFileRoles)
+        ),
+        cycles: findTypedCycles({
+          nodes: components.map((component) => component.id),
+          edges: dependencies.map((dependency) => ({
+            from: dependency.fromComponentId,
+            to: dependency.toComponentId,
+            typeOnly: dependency.countsByKind["type-only"] === dependency.weight
+          }))
+        })
+      };
+    },
+    projectFileGraph(componentId, options) {
+      return projectFiles(componentId, indexes, collectVisible(snapshot, options), options.filters);
+    }
   };
 }
 
-function buildIndexes(snapshot: ArchitectureSnapshot): SnapshotIndexes {
-  const componentsById = new Map(
-    snapshot.components.map((component) => [component.id, component] as const)
+function collectVisible(snapshot: ArchitectureSnapshot, options: ProjectGraphOptions): Set<string> {
+  return collectVisibleComponentIds(
+    snapshot.components,
+    Math.max(0, options.depth),
+    new Set(options.expanded)
   );
-  const parentById = new Map<string, string | undefined>();
+}
 
-  for (const component of snapshot.components) {
-    parentById.set(component.id, component.parentId);
+type ImportFilter = (fileImport: FileImport, fromFile: ArchitectureFile) => boolean;
+
+function createImportFilter(filters?: ProjectGraphFilters): ImportFilter {
+  const kinds = new Set(filters?.includeImportKinds);
+  const roles = new Set(filters?.includeFileRoles);
+
+  return (fileImport, fromFile) =>
+    (filters?.includeTypeOnly !== false || fileImport.kind !== "type-only") &&
+    (kinds.size === 0 || kinds.has(fileImport.kind)) &&
+    (roles.size === 0 || roles.has(fromFile.role));
+}
+
+function buildIndexes(snapshot: ArchitectureSnapshot): SnapshotIndexes {
+  return {
+    componentsById: new Map(snapshot.components.map((component) => [component.id, component])),
+    parentById: new Map(snapshot.components.map((component) => [component.id, component.parentId])),
+    childrenById: groupBy(snapshot.components, (component) => component.parentId),
+    filesById: new Map(snapshot.files.map((file) => [file.id, file])),
+    filesByComponentId: groupBy(snapshot.files, (file) => file.componentId),
+    importsById: new Map(snapshot.fileImports.map((item) => [item.id, item])),
+    importsBySourceFileId: groupBy(snapshot.fileImports, (item) => item.fromFileId)
+  };
+}
+
+function groupBy<T>(
+  items: readonly T[],
+  getKey: (item: T) => string | undefined
+): Map<string, T[]> {
+  const groups = new Map<string, T[]>();
+  for (const item of items) {
+    const key = getKey(item);
+    if (key === undefined) {
+      continue;
+    }
+    const group = groups.get(key);
+    if (group) {
+      group.push(item);
+    } else {
+      groups.set(key, [item]);
+    }
+  }
+
+  return groups;
+}
+
+function projectFiles(
+  componentId: string,
+  indexes: SnapshotIndexes,
+  visibleComponentIds: Set<string>,
+  filters?: ProjectGraphFilters
+): ProjectedFileGraph {
+  const component = indexes.componentsById.get(componentId);
+  if (!component) {
+    throw new Error(`Cannot project files for unknown component "${componentId}".`);
+  }
+
+  const files: ArchitectureFile[] = [];
+  const pending = [component];
+  for (let node = pending.pop(); node !== undefined; node = pending.pop()) {
+    for (const file of indexes.filesByComponentId.get(node.id) ?? []) {
+      files.push(file);
+    }
+    for (const child of indexes.childrenById.get(node.id) ?? []) {
+      pending.push(child);
+    }
+  }
+  files.sort((left, right) => compareStrings(left.path, right.path));
+  const subtreeFileIds = new Set(files.map((file) => file.id));
+  const matchesFilter = createImportFilter(filters);
+  const components = new Map<string, ArchitectureComponent>();
+  const imports: ProjectedFileImport[] = [];
+
+  for (const file of files) {
+    for (const fileImport of indexes.importsBySourceFileId.get(file.id) ?? []) {
+      if (!matchesFilter(fileImport, file)) {
+        continue;
+      }
+
+      const targetFile =
+        fileImport.toFileId === undefined ? undefined : indexes.filesById.get(fileImport.toFileId);
+      if (targetFile && subtreeFileIds.has(targetFile.id)) {
+        imports.push({ fileImport, target: { kind: "file", fileId: targetFile.id } });
+        continue;
+      }
+
+      const targetComponentId = targetFile?.componentId ?? fileImport.toComponentId;
+      if (targetComponentId === undefined) {
+        continue;
+      }
+
+      const visibleId = mapToVisibleAncestor(
+        targetComponentId,
+        indexes.parentById,
+        visibleComponentIds
+      );
+      const targetComponent = indexes.componentsById.get(visibleId);
+      if (!targetComponent) {
+        throw new Error(
+          `Cannot project import "${fileImport.id}" to unknown component "${visibleId}".`
+        );
+      }
+      components.set(visibleId, targetComponent);
+      imports.push({ fileImport, target: { kind: "component", componentId: visibleId } });
+    }
   }
 
   return {
-    componentsById,
-    parentById,
-    filesById: new Map(snapshot.files.map((file) => [file.id, file] as const)),
-    importsById: new Map(snapshot.fileImports.map((item) => [item.id, item] as const))
+    files,
+    components: [...components.values()].sort(compareComponents),
+    imports: imports.sort((left, right) => compareStrings(left.fileImport.id, right.fileImport.id))
   };
 }
 
@@ -122,13 +254,9 @@ function projectDependencies(
   dependencies: ComponentDependency[],
   indexes: SnapshotIndexes,
   visibleComponentIds: Set<string>,
-  filters: Required<ProjectGraphFilters>
+  matchesFilter: ImportFilter
 ): ProjectedDependency[] {
   const projected = new Map<string, ProjectedDependency>();
-  const importKindsFilter = new Set(filters.includeImportKinds);
-  const fileRolesFilter = new Set(filters.includeFileRoles);
-  const hasImportKindFilter = importKindsFilter.size > 0;
-  const hasFileRoleFilter = fileRolesFilter.size > 0;
 
   for (const dependency of dependencies) {
     const fromVisibleId = mapToVisibleAncestor(
@@ -153,24 +281,8 @@ function projectDependencies(
           return false;
         }
 
-        if (!filters.includeTypeOnly && fileImport.kind === "type-only") {
-          return false;
-        }
-
-        if (hasImportKindFilter && !importKindsFilter.has(fileImport.kind)) {
-          return false;
-        }
-
         const fromFile = indexes.filesById.get(fileImport.fromFileId);
-        if (!fromFile) {
-          return false;
-        }
-
-        if (hasFileRoleFilter && !fileRolesFilter.has(fromFile.role)) {
-          return false;
-        }
-
-        return true;
+        return fromFile !== undefined && matchesFilter(fileImport, fromFile);
       })
       .sort();
 
@@ -215,9 +327,8 @@ function projectExternalDependencies(
   externalDependencies: ExternalDependency[],
   indexes: SnapshotIndexes,
   visibleComponentIds: Set<string>,
-  filters: Required<ProjectGraphFilters>
+  fileRolesFilter: ReadonlySet<FileRole>
 ): ProjectedExternalDependency[] {
-  const fileRolesFilter = new Set(filters.includeFileRoles);
   const hasFileRoleFilter = fileRolesFilter.size > 0;
   const projected = new Map<string, ProjectedExternalDependency>();
 

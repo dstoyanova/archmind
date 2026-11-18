@@ -255,10 +255,13 @@ ArchitectureSnapshot
 ```
 
 - **Dependencies** are stored between _owning_ components, the deepest component that contains each file. An import of a workspace package whose entry point cannot be mapped to a file targets the package component itself (`toComponentId`).
-- **Projection:** a domain function, `projectGraph(snapshot, { depth | expanded[], filters })`, produces the graph at any level of detail.
+- **Projection:** `createSnapshotProjector(snapshot)` checks domain invariants and indexes an immutable snapshot once. Reuse it for component and file projections. `projectGraph(snapshot, options)` is the one-off convenience function.
+  - Options are `{ depth, expanded?, filters? }`. Depth and expansion determine which components are visible.
   - Each endpoint maps to its nearest visible ancestor.
   - Edges inside one visible node are dropped.
   - Weights, counts and evidence are aggregated.
+  - Cycles are computed on the projected, filtered edges, using the same `typeOnly` classification as the architecture engine.
+- **File projection:** `projector.projectFileGraph(componentId, options)` returns all files in the component subtree. Filters apply to imports by source role and import kind. A resolved target inside the subtree stays a file; otherwise the import targets the nearest visible component, including workspace imports without a resolved file. Imports without an internal target are omitted.
 - **Metrics** for a component are computed on the production graph projected at that component's depth.
 - **Deterministic IDs:** a component ID is a hash of its path in the hierarchy; a file ID is a hash of its repo-relative path; and so on.
 - **Invariants:** every dependency references components in the same snapshot, and every file has exactly one owning component. Domain functions validate both.

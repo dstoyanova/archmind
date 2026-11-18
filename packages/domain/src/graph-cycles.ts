@@ -10,6 +10,37 @@ export interface DirectedGraph {
   edges: readonly DirectedEdge[];
 }
 
+export interface TypedDirectedEdge extends DirectedEdge {
+  typeOnly: boolean;
+}
+
+export interface GraphCycle {
+  memberIds: string[];
+  typeOnly: boolean;
+}
+
+/** A cycle is type-only if none of its members still participate in a runtime cycle. */
+export function findTypedCycles(graph: {
+  nodes: readonly string[];
+  edges: readonly TypedDirectedEdge[];
+}): GraphCycle[] {
+  const cycles = findCycles(graph);
+  if (cycles.length === 0) {
+    return [];
+  }
+
+  const runtimeEdges = graph.edges.filter((edge) => !edge.typeOnly);
+  if (runtimeEdges.length === graph.edges.length) {
+    return cycles.map((memberIds) => ({ memberIds, typeOnly: false }));
+  }
+
+  const runtimeMembers = new Set(findCycles({ nodes: graph.nodes, edges: runtimeEdges }).flat());
+  return cycles.map((memberIds) => ({
+    memberIds,
+    typeOnly: !memberIds.some((id) => runtimeMembers.has(id))
+  }));
+}
+
 /**
  * Returns the strongly connected components that contain a cycle: components
  * with more than one member, or a single member with a self-loop. Members are

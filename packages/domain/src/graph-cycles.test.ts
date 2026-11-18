@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { findCycles } from "./graph-cycles.js";
+import { findCycles, findTypedCycles } from "./graph-cycles.js";
 
 describe("findCycles", () => {
   it("returns multi-member components and self-loops with sorted members", () => {
@@ -13,6 +13,27 @@ describe("findCycles", () => {
         { from: "d", to: "d" },
         { from: "d", to: "e" }
       ]
+    });
+
+    describe("findTypedCycles", () => {
+      it("marks a cycle as runtime when any runtime cycle survives within its members", () => {
+        expect(
+          findTypedCycles({
+            nodes: ["e", "c", "b", "a", "d"],
+            edges: [
+              { from: "a", to: "b", typeOnly: false },
+              { from: "b", to: "a", typeOnly: false },
+              { from: "b", to: "c", typeOnly: true },
+              { from: "c", to: "a", typeOnly: false },
+              { from: "d", to: "e", typeOnly: true },
+              { from: "e", to: "d", typeOnly: false }
+            ]
+          })
+        ).toEqual([
+          { memberIds: ["a", "b", "c"], typeOnly: false },
+          { memberIds: ["d", "e"], typeOnly: true }
+        ]);
+      });
     });
 
     expect(cycles).toEqual([["a", "b", "c"], ["d"]]);
