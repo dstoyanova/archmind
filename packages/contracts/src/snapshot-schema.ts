@@ -13,7 +13,7 @@ import {
 import { z } from "zod";
 
 const nonNegativeInt = z.number().int().nonnegative();
-const nonNegativeNumber = z.number().nonnegative();
+const nonNegativeNumber = z.number().nonnegative().finite();
 const positiveInt = z.number().int().positive();
 
 export const fileRoleSchema = z.enum(FILE_ROLES);
@@ -131,26 +131,27 @@ export const snapshotSourceSchema = z.object({
 
 // `satisfies` fails the build when the schema stops producing the domain `ArchitectureSnapshot`;
 // the opposite direction is covered by a type test in snapshot-schema.test.ts.
-export const architectureSnapshotSchema = z
-  .object({
-    schemaVersion: z.string().min(1),
-    engineVersion: z.string().min(1),
-    parserVersion: z.string().min(1),
-    analysisConfigHash: z.string().min(1),
-    contentHash: z.string().min(1),
-    source: snapshotSourceSchema,
-    createdAt: z.string().datetime({ offset: true }),
-    components: z.array(architectureComponentSchema),
-    files: z.array(architectureFileSchema),
-    symbols: z.array(architectureSymbolSchema),
-    fileImports: z.array(fileImportSchema),
-    dependencies: z.array(dependencySchema),
-    externalDependencies: z.array(externalDependencySchema),
-    cycles: z.array(cycleSchema),
-    resolutionStats: resolutionStatsSchema,
-    diagnostics: z.array(diagnosticSchema)
-  })
-  .superRefine((snapshot, ctx) => {
+export const architectureSnapshotStructureSchema = z.object({
+  schemaVersion: z.string().min(1),
+  engineVersion: z.string().min(1),
+  parserVersion: z.string().min(1),
+  analysisConfigHash: z.string().min(1),
+  contentHash: z.string().min(1),
+  source: snapshotSourceSchema,
+  createdAt: z.string().datetime({ offset: true }),
+  components: z.array(architectureComponentSchema),
+  files: z.array(architectureFileSchema),
+  symbols: z.array(architectureSymbolSchema),
+  fileImports: z.array(fileImportSchema),
+  dependencies: z.array(dependencySchema),
+  externalDependencies: z.array(externalDependencySchema),
+  cycles: z.array(cycleSchema),
+  resolutionStats: resolutionStatsSchema,
+  diagnostics: z.array(diagnosticSchema)
+}) satisfies z.ZodType<ArchitectureSnapshot, z.ZodTypeDef, unknown>;
+
+export const architectureSnapshotSchema = architectureSnapshotStructureSchema.superRefine(
+  (snapshot, ctx) => {
     const errors = validateSnapshotInvariants(snapshot);
     for (const error of errors) {
       ctx.addIssue({
@@ -158,6 +159,7 @@ export const architectureSnapshotSchema = z
         message: `${error.code}: ${error.message}`
       });
     }
-  }) satisfies z.ZodType<ArchitectureSnapshot, z.ZodTypeDef, unknown>;
+  }
+) satisfies z.ZodType<ArchitectureSnapshot, z.ZodTypeDef, unknown>;
 
 export type ArchitectureSnapshotDocument = z.infer<typeof architectureSnapshotSchema>;

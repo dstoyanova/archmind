@@ -97,6 +97,14 @@ export function createExplorerOpenApiDocument(): ReturnType<
           description: "Resource not found",
           content: { "application/json": { schema: error } }
         },
+        ...(suffix === ""
+          ? {}
+          : {
+              422: {
+                description: "Snapshot failed validation",
+                content: { "application/json": { schema: error } }
+              }
+            }),
         default: {
           description: "Explorer error",
           content: { "application/json": { schema: error } }

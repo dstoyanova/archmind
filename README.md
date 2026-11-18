@@ -57,3 +57,17 @@ Node.js 22 or newer is required (see `.nvmrc`). `pnpm format` rewrites files wit
 ## CLI analysis
 
 See [docs/development/cli-analyze.md](./docs/development/cli-analyze.md) for full setup, command options and examples.
+
+## Local explorer API
+
+Point the read-only API at an existing directory of CLI-generated snapshot JSON files:
+
+```bash
+ARCHMIND_SNAPSHOT_DIR=/absolute/path/to/snapshots pnpm dev --filter @archmind/api
+```
+
+Open [Swagger UI](http://127.0.0.1:3001/api/docs) to browse the API. It listens only on `127.0.0.1`, defaults to port `3001` (`PORT` overrides it), and disables CORS unless `ARCHMIND_WEB_ORIGIN` specifies one exact origin, such as `http://localhost:3000`. This is a local development service, not an authenticated deployment.
+
+Files ending in `.evaluation.json` and symlinks are ignored. Snapshot files over 16 MiB, invalid documents, and files with a mismatched content hash are reported in the snapshot list rather than served.
+
+For a production bundle, run `pnpm build --filter @archmind/api`, then `ARCHMIND_SNAPSHOT_DIR=/absolute/path/to/snapshots pnpm --filter @archmind/api start`.

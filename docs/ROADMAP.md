@@ -52,7 +52,7 @@ Every milestone ends with a **working, demoable product**. No milestone consists
 
 - [x] Shared explorer graph functions in `domain`: cycles on any projected graph, and file-level projection.
 - [x] Explorer API contracts and OpenAPI.
-- [ ] Read-only NestJS API serving validated snapshot files from a directory.
+- [x] Read-only NestJS API serving validated snapshot files from a directory.
 - [ ] Interactive hierarchical graph: auto-layout, expand and collapse, search, cycle highlighting, and filters for file role and type-only imports.
 - [ ] Snapshot overview, component details, dependency evidence and drill-down to files.
 - [ ] ArchMind's own `archmind.config.json`, with `componentRoots` and `analysis.exclude`.

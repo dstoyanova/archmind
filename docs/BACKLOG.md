@@ -143,15 +143,15 @@ Create `apps/api` (NestJS) with a file-based `SnapshotReader` adapter that reads
 
 - **Depends on:** M2.2
 - **Acceptance criteria:**
-  - [ ] Implements the M2 endpoints under `/api/workspaces/local/...`. Any other workspace ID returns `404`.
-  - [ ] Modules are organised by bounded context under `src/modules/`.
-  - [ ] Snapshot files are validated when loaded: schema, invariants, `verifyContentHash` and a supported `schemaVersion`. Invalid files are listed with the reason and never crash the API. `*.evaluation.json` files are ignored.
-  - [ ] Snapshot IDs map to files only through the directory listing. Request values are never used as paths. Files above a size limit are rejected.
-  - [ ] Snapshots are loaded on demand into a bounded cache, and validated and indexed once per load.
-  - [ ] Binds to `127.0.0.1` by default. Cross-origin requests are allowed only from the configured web origin.
-  - [ ] Validates input with zod pipes and returns consistent errors.
-  - [ ] Serves Swagger UI at `/api/docs`.
-  - [ ] Integration tests run against fixture snapshots generated from the CLI fixtures (not committed, so they never go stale), plus invalid, tampered and oversized files.
+  - [x] Implements the M2 endpoints under `/api/workspaces/local/...`. Any other workspace ID returns `404`.
+  - [x] Modules are organised by bounded context under `src/modules/`.
+  - [x] Snapshot files are validated when loaded: schema, invariants, `verifyContentHash` and a supported `schemaVersion`. Invalid files are listed with the reason and never crash the API. `*.evaluation.json` files are ignored.
+  - [x] Snapshot IDs map to files only through the directory listing. Request values are never used as paths. Files above a size limit are rejected.
+  - [x] Snapshots are loaded on demand into a bounded cache, and validated and indexed once per load.
+  - [x] Binds to `127.0.0.1` by default. Cross-origin requests are allowed only from the configured web origin.
+  - [x] Validates input with zod pipes and returns consistent errors.
+  - [x] Serves Swagger UI at `/api/docs`.
+  - [x] Integration tests run against fixture snapshots generated from the CLI fixtures (not committed, so they never go stale), plus invalid, tampered and oversized files.
 
 ### M2.4 Build the architecture explorer UI
 

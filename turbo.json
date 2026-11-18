@@ -1,5 +1,14 @@
 {
   "tasks": {
+    "dev": {
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["ARCHMIND_SNAPSHOT_DIR", "ARCHMIND_WEB_ORIGIN", "PORT"]
+    },
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+    },
     "lint": {
       "outputs": []
     },
