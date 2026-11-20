@@ -16,6 +16,7 @@ import { createContext, memo, useContext, useEffect, type ReactNode } from "reac
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { ComponentNode, ExplorerNode } from "./layout";
+import type { ThemePreference } from "./theme";
 
 interface Interaction {
   expandable: ReadonlySet<string>;
@@ -95,11 +96,13 @@ export function GraphCanvas({
   nodes,
   edges,
   interaction,
+  theme,
   children
 }: {
   nodes: ExplorerNode[];
   edges: Edge[];
   interaction: Interaction;
+  theme: ThemePreference;
   children?: ReactNode;
 }) {
   return (
@@ -108,6 +111,7 @@ export function GraphCanvas({
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        colorMode={theme}
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable={false}
@@ -116,7 +120,7 @@ export function GraphCanvas({
         fitView
         aria-label="Architecture dependency graph"
       >
-        <Background gap={20} color="#cbd5e1" />
+        <Background gap={20} color="var(--color-border)" />
         <Controls showInteractive={false} />
         <FitView nodes={nodes} focus={interaction.focused} />
         {children}

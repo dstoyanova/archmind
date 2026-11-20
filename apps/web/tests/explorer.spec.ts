@@ -2,6 +2,38 @@ import { env, stdout } from "node:process";
 
 import { expect, test } from "@playwright/test";
 
+test("follows the system theme by default and remembers explicit overrides", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.goto("/");
+  const theme = page.getByRole("combobox", { name: "Theme" });
+  const body = page.locator("body");
+  const graph = page.getByRole("region", { name: "Architecture graph" }).locator(".react-flow");
+  await expect(theme).toHaveText("System");
+  await expect(body).toHaveCSS("background-color", "rgb(245, 247, 251)");
+  await expect(graph).toHaveClass(/\blight\b/);
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(body).toHaveCSS("background-color", "rgb(11, 17, 32)");
+  await expect(graph).toHaveClass(/\bdark\b/);
+
+  await theme.click();
+  await page.getByRole("option", { name: "Light", exact: true }).click();
+  await page.reload();
+  await expect(theme).toHaveText("Light");
+  await expect(body).toHaveCSS("background-color", "rgb(245, 247, 251)");
+  await expect(graph).toHaveClass(/\blight\b/);
+
+  await page.emulateMedia({ colorScheme: "light" });
+  await theme.click();
+  await page.getByRole("option", { name: "Dark", exact: true }).click();
+  await expect(body).toHaveCSS("background-color", "rgb(11, 17, 32)");
+  await expect(graph).toHaveClass(/\bdark\b/);
+
+  await theme.click();
+  await page.getByRole("option", { name: "System", exact: true }).click();
+  await expect(body).toHaveCSS("background-color", "rgb(245, 247, 251)");
+  await expect(graph).toHaveClass(/\blight\b/);
+});
+
 test("expands and searches nested components and reports invalid snapshots", async ({ page }) => {
   await page.goto("/");
   const graph = page.getByRole("region", { name: "Architecture graph" });

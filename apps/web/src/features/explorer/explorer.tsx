@@ -23,6 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { fetchGraph, fetchSnapshots } from "./api";
 import { graphEdges } from "./edges";
 import type { ExplorerNode } from "./layout";
+import { parseThemePreference, themeCookie, type ThemePreference } from "./theme";
 
 const GraphCanvas = dynamic(() => import("./graph-canvas").then((module) => module.GraphCanvas), {
   ssr: false,
@@ -35,7 +36,14 @@ type Listing = SnapshotList | { error: string };
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "Something went wrong.";
 
-export function Explorer({ initial }: { initial: Listing }) {
+export function Explorer({
+  initial,
+  initialTheme
+}: {
+  initial: Listing;
+  initialTheme: ThemePreference;
+}) {
+  const [theme, setTheme] = useState(initialTheme);
   const [listing, setListing] = useState(initial);
   const [selectedId, setSelectedId] = useState(() =>
     "items" in initial
@@ -68,9 +76,17 @@ export function Explorer({ initial }: { initial: Listing }) {
   }
 
   const listProblem = listError ?? ("error" in listing ? listing.error : undefined);
+
+  function changeTheme(value: string) {
+    const preference = parseThemePreference(value);
+    globalThis.document.documentElement.dataset.theme = preference;
+    globalThis.document.cookie = `${themeCookie}=${preference}; Path=/; Max-Age=31536000; SameSite=Lax`;
+    setTheme(preference);
+  }
+
   return (
     <main className="mx-auto max-w-[1740px] space-y-5 px-4 py-6 sm:px-8">
-      <header className="flex items-center gap-3">
+      <header className="flex flex-wrap items-center gap-3">
         <div className="rounded-lg bg-primary p-2 text-primary-foreground">
           <Network aria-hidden="true" size={24} />
         </div>
@@ -79,6 +95,19 @@ export function Explorer({ initial }: { initial: Listing }) {
             ArchMind / Local workspace
           </p>
           <h1 className="text-2xl font-semibold tracking-tight">Architecture explorer</h1>
+        </div>
+        <div className="ml-auto space-y-1.5">
+          <Label htmlFor="theme">Theme</Label>
+          <Select value={theme} onValueChange={changeTheme}>
+            <SelectTrigger id="theme" className="min-w-28">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="system">System</SelectItem>
+              <SelectItem value="light">Light</SelectItem>
+              <SelectItem value="dark">Dark</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </header>
       <section aria-label="Snapshots" className="flex flex-wrap items-end gap-3">
@@ -140,13 +169,17 @@ export function Explorer({ initial }: { initial: Listing }) {
         </Alert>
       )}
       {selected?.status === "ready" && (
-        <SnapshotGraph key={`${selected.id}:${selected.contentHash}`} id={selected.id} />
+        <SnapshotGraph
+          key={`${selected.id}:${selected.contentHash}`}
+          id={selected.id}
+          theme={theme}
+        />
       )}
     </main>
   );
 }
 
-function SnapshotGraph({ id }: { id: string }) {
+function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [enabledRoles, setRoles] = useState<readonly Role[]>(["source"]);
   const [typeOnly, setTypeOnly] = useState(true);
@@ -364,7 +397,7 @@ function SnapshotGraph({ id }: { id: string }) {
       <section
         aria-label="Architecture graph"
         aria-busy={busy}
-        className="relative h-[70dvh] min-h-[480px] overflow-hidden rounded-xl border bg-white lg:h-[calc(100dvh-11rem)]"
+        className="relative h-[70dvh] min-h-[480px] overflow-hidden rounded-xl border bg-background lg:h-[calc(100dvh-11rem)]"
       >
         {busy && (
           <Badge role="status" className="absolute top-3 right-3 z-10">
@@ -383,6 +416,7 @@ function SnapshotGraph({ id }: { id: string }) {
           </Alert>
         ) : result?.nodes.length ? (
           <GraphCanvas
+            theme={theme}
             nodes={result.nodes}
             edges={edgeView.edges}
             interaction={{ expandable, expanded, cycles: edgeView.cycles, focused, toggle }}
