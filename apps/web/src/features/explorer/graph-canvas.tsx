@@ -24,6 +24,7 @@ interface Interaction {
   cycles: ReadonlyMap<string, "type-cycle" | "runtime-cycle">;
   focused: string | null;
   toggle(id: string): void;
+  select(id: string): void;
 }
 
 const InteractionContext = createContext<Interaction | null>(null);
@@ -42,9 +43,17 @@ const GraphComponent = memo(function GraphComponent({ id, data }: NodeProps<Comp
       <Handle type="target" position={Position.Left} isConnectable={false} />
       <div className="flex items-start gap-2 p-2.5">
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold" title={component.name}>
-            {component.name}
-          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="nodrag nopan h-auto max-w-full justify-start p-0 text-sm font-semibold"
+            title={component.name}
+            aria-label={`Details for ${component.name}`}
+            onClick={() => interaction?.select(id)}
+          >
+            <span className="truncate">{component.name}</span>
+          </Button>
           <div
             className="truncate text-xs text-muted-foreground"
             title={component.paths.join(", ")}

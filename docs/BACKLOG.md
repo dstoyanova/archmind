@@ -175,11 +175,11 @@ Add a snapshot overview, a side panel and drill-down navigation (FR-E3, FR-E4, F
 
 - **Depends on:** M2.4
 - **Acceptance criteria:**
-  - [ ] The panel shows metrics (labelled as production-graph values), files, child components, inbound and outbound dependencies, external dependencies, and evidence (file:line, kind).
-  - [ ] Drill-down from a component to its file graph works.
-  - [ ] The snapshot overview shows versions, source metadata, resolution statistics and diagnostics, so missing edges can be explained (for example `WORKSPACE_ENTRY_UNMAPPED` or `IMPORT_TARGET_EXCLUDED`).
-  - [ ] An accessible list alternative exists (NFR-14).
-  - [ ] A Playwright smoke test covers opening a snapshot, expanding a component, viewing evidence and drilling down to files.
+  - [x] The panel shows metrics (labelled as production-graph values), files, child components, inbound and outbound dependencies, external dependencies, and evidence (file:line, kind).
+  - [x] Drill-down from a component to its file graph works.
+  - [x] The snapshot overview shows versions, source metadata, resolution statistics and diagnostics, so missing edges can be explained (for example `WORKSPACE_ENTRY_UNMAPPED` or `IMPORT_TARGET_EXCLUDED`).
+  - [x] An accessible list alternative exists (NFR-14).
+  - [x] A Playwright smoke test covers opening a snapshot, expanding a component, viewing evidence and drilling down to files.
 
 ### M2.6 Configure ArchMind's self-analysis
 

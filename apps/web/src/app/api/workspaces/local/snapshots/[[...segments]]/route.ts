@@ -6,10 +6,19 @@ export async function GET(
   context: { params: Promise<{ segments?: string[] }> }
 ): Promise<Response> {
   const { segments = [] } = await context.params;
-  if (
-    segments.length !== 0 &&
-    (segments.length !== 2 || segments[1] !== "graph" || !/^[a-f0-9]{64}$/.test(segments[0] ?? ""))
-  ) {
+  const [id, resource, component, suffix] = segments;
+  const allowed =
+    segments.length === 0 ||
+    (/^[a-f0-9]{64}$/.test(id ?? "") &&
+      (segments.length === 1 ||
+        (segments.length === 2 &&
+          ["graph", "diagnostics", "dependencies"].includes(resource ?? "")) ||
+        (resource === "components" &&
+          component &&
+          component !== "." &&
+          component !== ".." &&
+          (segments.length === 3 || (segments.length === 4 && suffix === "files")))));
+  if (!allowed) {
     return Response.json(
       { error: { code: "NOT_FOUND", message: "Explorer route not found." } },
       { status: 404 }

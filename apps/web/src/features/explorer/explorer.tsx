@@ -22,6 +22,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { fetchGraph, fetchSnapshots } from "./api";
 import { graphEdges } from "./edges";
+import { ComponentPanel } from "./component-panel";
+import { SnapshotOverviewPanel } from "./snapshot-overview";
 import type { ExplorerNode } from "./layout";
 import { parseThemePreference, themeCookie, type ThemePreference } from "./theme";
 
@@ -29,6 +31,13 @@ const GraphCanvas = dynamic(() => import("./graph-canvas").then((module) => modu
   ssr: false,
   loading: () => <Skeleton className="h-full" aria-label="Loading graph canvas" />
 });
+const FileDrilldown = dynamic(
+  () => import("./file-drilldown").then((module) => module.FileDrilldown),
+  {
+    ssr: false,
+    loading: () => <p role="status">Loading file graph...</p>
+  }
+);
 const roles = ["source", "test", "story", "script", "config"] as const;
 type Role = (typeof roles)[number];
 type Component = ComponentGraph["components"][number];
@@ -169,11 +178,10 @@ export function Explorer({
         </Alert>
       )}
       {selected?.status === "ready" && (
-        <SnapshotGraph
-          key={`${selected.id}:${selected.contentHash}`}
-          id={selected.id}
-          theme={theme}
-        />
+        <div className="space-y-4" key={`${selected.id}:${selected.contentHash}`}>
+          <SnapshotOverviewPanel id={selected.id} />
+          <SnapshotGraph id={selected.id} theme={theme} />
+        </div>
       )}
     </main>
   );
@@ -187,6 +195,9 @@ function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
   const [external, setExternal] = useState(true);
   const [search, setSearch] = useState("");
   const [focused, setFocused] = useState<string | null>(null);
+  const [detailId, setDetailId] = useState<string>();
+  const [showFiles, setShowFiles] = useState(false);
+  const [showList, setShowList] = useState(false);
   const [catalog, setCatalog] = useState<Component[]>();
   const [catalogError, setCatalogError] = useState<string>();
   const [result, setResult] = useState<{
@@ -251,6 +262,14 @@ function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
     () => new Set(catalog?.flatMap(({ parentId }) => (parentId ? [parentId] : []))),
     [catalog]
   );
+  const visible = result?.graph.components;
+  const names = useMemo(
+    () => new Map(visible?.map(({ id: componentId, name }) => [componentId, name])),
+    [visible]
+  );
+  const detail = detailId
+    ? (componentIndex.get(detailId) ?? visible?.find((item) => item.id === detailId))
+    : undefined;
   const currentError = error?.key === generation ? error.message : undefined;
   const busy = result?.key !== generation && !currentError;
   const results = useMemo(() => {
@@ -317,7 +336,9 @@ function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[17rem_minmax(0,1fr)]">
+    <div
+      className={`grid gap-4 ${detail && !showFiles ? "lg:grid-cols-[17rem_minmax(0,1fr)] xl:grid-cols-[17rem_minmax(0,1fr)_20rem]" : "lg:grid-cols-[17rem_minmax(0,1fr)]"}`}
+    >
       <Card>
         <CardContent className="space-y-5">
           <div className="space-y-2">
@@ -394,44 +415,118 @@ function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
           </div>
         </CardContent>
       </Card>
-      <section
-        aria-label="Architecture graph"
-        aria-busy={busy}
-        className="relative h-[70dvh] min-h-[480px] overflow-hidden rounded-xl border bg-background lg:h-[calc(100dvh-11rem)]"
-      >
-        {busy && (
-          <Badge role="status" className="absolute top-3 right-3 z-10">
-            Loading graph…
-          </Badge>
-        )}
-        {currentError ? (
-          <Alert variant="destructive" className="m-4 w-auto">
-            <AlertTitle>Could not load graph</AlertTitle>
-            <AlertDescription>
-              {currentError}
-              <Button variant="outline" onClick={() => setAttempt((value) => value + 1)}>
-                Retry graph
-              </Button>
-            </AlertDescription>
-          </Alert>
-        ) : result?.nodes.length ? (
-          <GraphCanvas
-            theme={theme}
-            nodes={result.nodes}
-            edges={edgeView.edges}
-            interaction={{ expandable, expanded, cycles: edgeView.cycles, focused, toggle }}
-          />
-        ) : result ? (
-          <Alert className="m-4 w-auto">
-            <AlertTitle>No components found</AlertTitle>
-            <AlertDescription>
-              This snapshot has no visible architecture components.
-            </AlertDescription>
-          </Alert>
-        ) : (
-          <Skeleton className="absolute inset-3" aria-label="Loading architecture graph" />
-        )}
-      </section>
+      {showFiles && detail ? (
+        <FileDrilldown
+          key={JSON.stringify([detail.id, query])}
+          id={id}
+          component={detail.id}
+          name={detail.name}
+          projection={query}
+          theme={theme}
+          onBack={() => setShowFiles(false)}
+        />
+      ) : (
+        <div className="min-w-0 space-y-2">
+          <Button variant="outline" aria-expanded={showList} onClick={() => setShowList(!showList)}>
+            {showList ? "Show component graph" : "Show component list"}
+          </Button>
+          {showList && (
+            <section
+              aria-label="Component graph list"
+              aria-busy={busy}
+              className="max-h-[70dvh] space-y-2 overflow-auto rounded-xl border p-3"
+            >
+              {busy && <p role="status">Loading components...</p>}
+              {!busy && !currentError && !visible?.length && <p>No components found.</p>}
+              <ul className="space-y-2">
+                {visible?.map((component) => (
+                  <li key={component.id} className="flex flex-wrap items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setDetailId(component.id)}>
+                      {component.name} details
+                    </Button>
+                    <span className="text-sm break-all">
+                      {component.paths.join(", ")} · Level {component.depth}
+                    </span>
+                    {expandable.has(component.id) && component.depth >= 1 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        aria-expanded={expanded.has(component.id)}
+                        onClick={() => toggle(component.id)}
+                      >
+                        {expanded.has(component.id) ? "Collapse" : "Expand"} {component.name}
+                      </Button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          <section
+            hidden={showList && !currentError}
+            aria-label="Architecture graph"
+            aria-busy={busy}
+            className="relative h-[70dvh] min-h-[480px] overflow-hidden rounded-xl border bg-background lg:h-[calc(100dvh-11rem)]"
+          >
+            {busy && (
+              <Badge role="status" className="absolute top-3 right-3 z-10">
+                Loading graph…
+              </Badge>
+            )}
+            {currentError ? (
+              <Alert variant="destructive" className="m-4 w-auto">
+                <AlertTitle>Could not load graph</AlertTitle>
+                <AlertDescription>
+                  {currentError}
+                  <Button variant="outline" onClick={() => setAttempt((value) => value + 1)}>
+                    Retry graph
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            ) : result?.nodes.length ? (
+              <GraphCanvas
+                theme={theme}
+                nodes={result.nodes}
+                edges={edgeView.edges}
+                interaction={{
+                  expandable,
+                  expanded,
+                  cycles: edgeView.cycles,
+                  focused,
+                  toggle,
+                  select: setDetailId
+                }}
+              />
+            ) : result ? (
+              <Alert className="m-4 w-auto">
+                <AlertTitle>No components found</AlertTitle>
+                <AlertDescription>
+                  This snapshot has no visible architecture components.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <Skeleton className="absolute inset-3" aria-label="Loading architecture graph" />
+            )}
+          </section>
+        </div>
+      )}
+      {detail && !showFiles && (
+        <ComponentPanel
+          key={JSON.stringify([detail.id, query])}
+          id={id}
+          component={detail.id}
+          name={detail.name}
+          projection={query}
+          names={names}
+          onSelect={(componentId) => {
+            const child = componentIndex.get(componentId);
+            if (child) reveal(child);
+            setDetailId(componentId);
+          }}
+          onClose={() => setDetailId(undefined)}
+          onDrillDown={() => setShowFiles(true)}
+        />
+      )}
     </div>
   );
 }

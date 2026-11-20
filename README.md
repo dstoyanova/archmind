@@ -68,6 +68,8 @@ ARCHMIND_SNAPSHOT_DIR=/absolute/path/to/snapshots pnpm dev --filter @archmind/ap
 
 Open [the explorer](http://127.0.0.1:3000). The **Theme** control follows your system by default. Choose **Light** or **Dark** to save an override in your browser, or **System** to follow your device again. The web app forwards explorer requests to the local API at `http://127.0.0.1:3001`; set `ARCHMIND_API_ORIGIN` if the API uses a different port.
 
+Use **Snapshot overview** for analysis metadata, resolution statistics, and diagnostics. Select a component in the graph or use **Show component list** to open its details, inspect dependency evidence, or drill down to the file graph.
+
 Point the read-only API at an existing directory of CLI-generated snapshot JSON files:
 
 ```bash

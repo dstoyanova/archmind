@@ -56,6 +56,50 @@ test("expands and searches nested components and reports invalid snapshots", asy
   await expect(page.getByText("Snapshot is not valid JSON.")).toBeVisible();
 });
 
+test("opens overview, inspects dependency evidence, and drills into the file graph", async ({
+  page
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Snapshot overview" }).click();
+  await expect(page.getByText("Engine version", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Diagnostics/ })).toBeVisible();
+  await page.getByRole("button", { name: "Snapshot overview" }).click();
+
+  const graph = page.getByRole("region", { name: "Architecture graph" });
+  await graph.getByRole("button", { name: "Expand lib" }).click();
+  await expect(graph.getByRole("button", { name: "Details for internal" })).toBeVisible();
+  await page.getByRole("button", { name: "Show component list" }).click();
+  await page
+    .getByRole("region", { name: "Component graph list" })
+    .getByRole("button", { name: "app details" })
+    .press("Enter");
+  const panel = page.getByRole("complementary", { name: "Component details" });
+  await expect(panel.getByText(/Production graph at this component/)).toBeVisible();
+  await panel
+    .getByRole("button", { name: /View evidence: app to/ })
+    .first()
+    .click();
+  const evidence = panel.getByRole("region", { name: "Dependency evidence" });
+  await expect(evidence.getByText(/packages\/app\/src\/main\.ts:\d+/).first()).toBeVisible();
+  await expect(evidence.getByText(/static · source/).first()).toBeVisible();
+
+  await panel.getByRole("button", { name: "Open file graph" }).click();
+  const files = page.getByRole("region", { name: "File graph", exact: true });
+  await expect(files.getByText("File graph: app")).toBeVisible();
+  await expect(
+    files.locator(".react-flow__node").filter({ hasText: "packages/app/src/main.ts" })
+  ).toBeVisible();
+  await files.getByText("File graph list", { exact: true }).click();
+  await expect(
+    files
+      .getByRole("list", { name: "File imports" })
+      .getByText(/packages\/app\/src\/main\.ts/)
+      .first()
+  ).toBeVisible();
+  await files.getByRole("button", { name: "Back to component graph" }).click();
+  await expect(page.getByRole("region", { name: "Component graph list" })).toBeVisible();
+});
+
 test("measures first paint and expand/collapse for the 300-component fixture", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("combobox", { name: "Snapshot" }).click();
