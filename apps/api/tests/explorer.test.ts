@@ -1,4 +1,4 @@
-import { cp, mkdtemp, open, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, open, rm, symlink, writeFile, type FileHandle } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, URL, URLSearchParams } from "node:url";
@@ -16,7 +16,7 @@ import {
   snapshotOverviewSchema
 } from "@archmind/contracts";
 import type { INestApplication } from "@nestjs/common";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { createExplorerApp } from "../src/app.js";
 import { FileSnapshotReader } from "../src/modules/architecture-model/file-snapshot-reader.js";
@@ -98,6 +98,41 @@ async function snapshotPath(label: string): Promise<string> {
 }
 
 describe("local explorer", () => {
+  it("reads each unchanged list entry only once even when the list exceeds the graph cache", async () => {
+    const handle = await open(join(directory, "a.json"));
+    await handle.close();
+    const reads = vi.spyOn(Object.getPrototypeOf(handle) as FileHandle, "read");
+    const readsFromStart = () =>
+      reads.mock.calls.filter((call: readonly unknown[]) => call[3] === 0).length;
+    const changed = join(directory, "invalid-json.json");
+    try {
+      const first = snapshotListSchema.parse(await json(route));
+      expect(first.items.length).toBeGreaterThan(4);
+      expect(readsFromStart()).toBe(
+        first.items.length - 1 // The oversized file is rejected without a body read.
+      );
+      reads.mockClear();
+      expect(await json(route)).toEqual(first);
+      expect(reads).not.toHaveBeenCalled();
+
+      const graphPath = `${await snapshotPath("a.json")}/graph`;
+      await json(graphPath);
+      reads.mockClear();
+      await cp(join(directory, "a.json"), changed);
+      const refreshed = snapshotListSchema.parse(await json(route));
+      expect(refreshed.items.find(({ label }) => label === "invalid-json.json")).toMatchObject({
+        status: "ready"
+      });
+      expect(readsFromStart()).toBe(1);
+      reads.mockClear();
+      await json(graphPath);
+      expect(reads).not.toHaveBeenCalled();
+    } finally {
+      reads.mockRestore();
+      await writeFile(changed, "{");
+    }
+  });
+
   it("paginates the listing, gives equal-content files distinct IDs, and diagnoses invalid files", async () => {
     const first = snapshotListSchema.parse(await json(`${route}?limit=2`));
     const [a, b] = first.items;
@@ -222,6 +257,19 @@ describe("local explorer", () => {
       "SNAPSHOT_NOT_FOUND"
     );
     expect((await get(route, { method: "POST" })).status).toBe(404);
+  });
+
+  it("returns a clear validation error above the expansion limit", async () => {
+    const path = await snapshotPath("a.json");
+    const query = new URLSearchParams();
+    for (let index = 0; index < 128; index++) {
+      query.append("expand", `cmp:${index.toString(16).padStart(64, "0")}`);
+    }
+    await json(`${path}/graph?${query}`);
+    query.append("expand", `cmp:${"f".repeat(64)}`);
+    expect(explorerErrorSchema.parse(await json(`${path}/graph?${query}`, 400))).toEqual({
+      error: { code: "INVALID_REQUEST", message: "At most 128 expand values are allowed." }
+    });
   });
 
   it("serves Swagger UI and allows only the configured browser origin", async () => {

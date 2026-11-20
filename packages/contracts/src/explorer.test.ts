@@ -107,6 +107,18 @@ describe("explorer queries", () => {
   ])("rejects malformed or contradictory graph options: %j", (params) => {
     expect(graphQuerySchema.safeParse(params).success).toBe(false);
   });
+
+  it("accepts 128 expansions and rejects 129 in graph and evidence projections", () => {
+    const expand = Array.from({ length: 128 }, (_, index) => `component-${index}`);
+    expect(graphQuerySchema.parse({ expand }).expand).toEqual(expand);
+    const oversized = [...expand, "extra"];
+    expect(() => graphQuerySchema.parse({ expand: oversized })).toThrow(
+      "At most 128 expand values are allowed."
+    );
+    expect(
+      dependencyEvidenceQuerySchema.safeParse({ expand: oversized, from: "a", to: "b" }).success
+    ).toBe(false);
+  });
 });
 
 describe("explorer mappings", () => {

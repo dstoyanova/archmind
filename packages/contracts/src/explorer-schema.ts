@@ -43,13 +43,21 @@ export const pageQuerySchema = z
   })
   .strict();
 
+export const MAX_PROJECTION_EXPANSIONS = 128;
+export const PROJECTION_EXPANSION_LIMIT_MESSAGE = `At most ${MAX_PROJECTION_EXPANSIONS} expand values are allowed.`;
+
 export const projectionQuerySchema = z
   .object({
     depth: z.preprocess(parseInteger, count.max(Number.MAX_SAFE_INTEGER)).default(1),
     expand: z
-      .preprocess(repeatedQueryParameter, z.array(id))
+      .preprocess(
+        repeatedQueryParameter,
+        z.array(id).max(MAX_PROJECTION_EXPANSIONS, PROJECTION_EXPANSION_LIMIT_MESSAGE)
+      )
       .default([])
-      .describe("Component IDs to expand. Repeat this parameter for multiple IDs."),
+      .describe(
+        `Component IDs to expand. Repeat this parameter for up to ${MAX_PROJECTION_EXPANSIONS} IDs.`
+      ),
     roles: z
       .preprocess(repeatedQueryParameter, z.array(fileRoleSchema).nonempty())
       .default(["source"])

@@ -7,7 +7,6 @@ import {
   toDependencyEvidence,
   toFileGraph,
   toProjectGraphOptions,
-  toSnapshotListItem,
   toSnapshotOverview,
   type ComponentDetail,
   type ComponentFilesPage,
@@ -61,12 +60,7 @@ export class ExplorerService {
     const page = paginate(await this.reader.list(), query, { kind: "snapshots" });
     const items: SnapshotListItem[] = [];
     for (const identity of page.items) {
-      const result = await this.reader.load(identity);
-      items.push(
-        result.status === "ready"
-          ? toSnapshotListItem(identity, result.data.snapshot)
-          : { ...identity, ...result }
-      );
+      items.push(await this.reader.summarize(identity));
     }
     return { items, nextCursor: page.nextCursor };
   }

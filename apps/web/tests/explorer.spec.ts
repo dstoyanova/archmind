@@ -1,5 +1,7 @@
 import { env, stdout } from "node:process";
+import { URL, URLSearchParams } from "node:url";
 
+import { snapshotListSchema } from "@archmind/contracts";
 import { expect, test } from "@playwright/test";
 
 test("follows the system theme by default and remembers explicit overrides", async ({ page }) => {
@@ -54,6 +56,69 @@ test("expands and searches nested components and reports invalid snapshots", asy
   await page.getByRole("combobox", { name: "Snapshot" }).click();
   await page.getByRole("option", { name: "invalid.json (invalid)" }).click();
   await expect(page.getByText("Snapshot is not valid JSON.")).toBeVisible();
+});
+
+test("refresh preserves a selection from a later page and falls back when it disappears", async ({
+  page
+}) => {
+  await page.goto("/");
+  let removeSelected = false;
+  await page.route(/\/api\/workspaces\/local\/snapshots(?:\?.*)?$/, async (route) => {
+    const url = new URL(route.request().url());
+    const secondPage = url.searchParams.has("cursor");
+    url.search = "";
+    const response = await route.fetch({ url: url.href });
+    const { items } = snapshotListSchema.parse(await response.json());
+    await route.fulfill({
+      response,
+      json: secondPage
+        ? { items: items.filter(({ label }) => label === "fixture.json"), nextCursor: null }
+        : {
+            items: items.filter(({ label }) => label !== "fixture.json"),
+            nextCursor: removeSelected ? null : "later-page"
+          }
+    });
+  });
+  const refresh = page.getByRole("button", { name: "Refresh snapshots" });
+  const snapshot = page.getByRole("combobox", { name: "Snapshot" });
+  await snapshot.click();
+  await page.getByRole("option", { name: "performance.json", exact: true }).click();
+  await snapshot.click();
+  await page.getByRole("option", { name: "fixture.json", exact: true }).click();
+
+  const graph = page.getByRole("region", { name: "Architecture graph" });
+  await graph.getByRole("button", { name: "Expand lib" }).click();
+  const search = page.getByRole("searchbox", { name: "Find a component" });
+  await search.fill("packages/lib/src/internal");
+  const internal = page.getByRole("checkbox", { name: "Internal dependencies" });
+  await internal.click();
+  await refresh.click();
+  await expect(refresh).toBeEnabled();
+  await expect(snapshot).toHaveText("fixture.json");
+  await expect(graph.getByRole("button", { name: "Collapse lib" })).toBeVisible();
+  await expect(search).toHaveValue("packages/lib/src/internal");
+  await expect(internal).not.toBeChecked();
+
+  removeSelected = true;
+  await refresh.click();
+  await expect(snapshot).toHaveText("performance.json");
+});
+
+test("the web proxy preserves the expansion-limit validation response", async ({ request }) => {
+  const path = "/api/workspaces/local/snapshots";
+  const { items } = snapshotListSchema.parse(await (await request.get(path)).json());
+  const snapshot = items.find(({ label }) => label === "fixture.json");
+  if (!snapshot) throw new Error("Missing browser fixture.");
+
+  const query = new URLSearchParams();
+  for (let index = 0; index < 129; index++) {
+    query.append("expand", `cmp:${index.toString(16).padStart(64, "0")}`);
+  }
+  const response = await request.get(`${path}/${snapshot.id}/graph?${query}`);
+  expect(response.status()).toBe(400);
+  expect(await response.json()).toMatchObject({
+    error: { code: "INVALID_REQUEST", message: "At most 128 expand values are allowed." }
+  });
 });
 
 test("opens overview, inspects dependency evidence, and drills into the file graph", async ({

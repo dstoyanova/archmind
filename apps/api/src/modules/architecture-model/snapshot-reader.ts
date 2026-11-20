@@ -1,4 +1,8 @@
-import type { ArchitectureSnapshotDocument, SnapshotIdentity } from "@archmind/contracts";
+import type {
+  ArchitectureSnapshotDocument,
+  SnapshotIdentity,
+  SnapshotListItem
+} from "@archmind/contracts";
 import type { ArchitectureFile, FileImport, SnapshotProjector } from "@archmind/domain";
 
 export const SNAPSHOT_READER = Symbol("SnapshotReader");
@@ -15,5 +19,6 @@ export type SnapshotLoadResult =
 
 export interface SnapshotReader {
   list(): Promise<readonly SnapshotIdentity[]>;
+  summarize(identity: SnapshotIdentity): Promise<SnapshotListItem>;
   load(identity: SnapshotIdentity): Promise<SnapshotLoadResult>;
 }

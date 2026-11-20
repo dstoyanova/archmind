@@ -1,4 +1,9 @@
-import { explorerErrorSchema, type ExplorerError } from "@archmind/contracts";
+import {
+  explorerErrorSchema,
+  MAX_PROJECTION_EXPANSIONS,
+  PROJECTION_EXPANSION_LIMIT_MESSAGE,
+  type ExplorerError
+} from "@archmind/contracts";
 import {
   Catch,
   HttpException,
@@ -8,6 +13,7 @@ import {
 } from "@nestjs/common";
 import { HttpAdapterHost } from "@nestjs/core";
 import { ZodValidationException } from "nestjs-zod";
+import { ZodError } from "zod";
 
 @Catch()
 export class ExplorerErrorFilter implements ExceptionFilter {
@@ -28,7 +34,25 @@ export class ExplorerErrorFilter implements ExceptionFilter {
     }
 
     if (exception instanceof ZodValidationException) {
-      return { error: { code: "INVALID_REQUEST", message: "Invalid request parameters." } };
+      const error = exception.getZodError();
+      const exceedsExpansionLimit =
+        error instanceof ZodError &&
+        error.issues.some(
+          (issue) =>
+            issue.code === "too_big" &&
+            issue.type === "array" &&
+            issue.maximum === MAX_PROJECTION_EXPANSIONS &&
+            issue.path.length === 1 &&
+            issue.path[0] === "expand"
+        );
+      return {
+        error: {
+          code: "INVALID_REQUEST",
+          message: exceedsExpansionLimit
+            ? PROJECTION_EXPANSION_LIMIT_MESSAGE
+            : "Invalid request parameters."
+        }
+      };
     }
 
     if (exception instanceof HttpException) {

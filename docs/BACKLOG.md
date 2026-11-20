@@ -204,8 +204,16 @@ Check that the inferred hierarchy makes sense to people (§7, "The inferred hier
 
 - [ ] Preserve useful sibling components when drilling deeper into a subtree. Validate a design that exposes Vitest's `node/reporters` without flattening `runtime`, and Changesets' CLI commands without flattening `lib`. Review any hierarchy model change against ADR-0005.
 - [ ] Reduce fixture noise in the production view. Reproduce with Vitest's `test/e2e/fixtures` and fixture packages; keep them discoverable when intentionally inspecting test infrastructure.
-- [ ] Qualify duplicate component labels in graph and dependency details as well as in search and list results. Verify that Changesets' two `pre` components are distinguishable without guessing their paths.
 - [ ] Explain missing edges next to resolution statistics. Distinguish unmapped source entries (`vitest/config`), excluded declaration targets, and non-code workspace imports (`@changesets/cli/package.json`); do not imply that a 0% unresolved rate means complete edge coverage.
+
+Items from the [M2 code review](./code-reviews/m2-code-review.md), which has the problem statements, actions and acceptance criteria:
+
+- [x] **E1 (P2):** Cache snapshot list summaries by file fingerprint, so listing more than four snapshots doesn't re-parse every file.
+- [x] **E2 (P2):** Keep the selected snapshot and graph state when refreshing the snapshot list.
+- [ ] **E3 (P2):** Review graph layout readability with screenshots of Vitest and Changesets, and decide whether to keep ELK `box` packing.
+- [ ] **E4 (P2):** Qualify duplicate component names in graph node titles, edge labels and evidence buttons, as well as in search and list results. Verify that Changesets' two `pre` components are distinguishable without guessing their paths.
+- [ ] **E5 (P2):** Complete the M2.7 evidence: trace the Vitest and Changesets edge-count changes, tune more packages, and note that diagnostics were sampled from the first page only.
+- [x] **E6 (P3):** Limit explorer projections to 128 repeated `expand` values. Larger lists within the HTTP request-size budget return `400 INVALID_REQUEST`; the UI prompts users to collapse components before expanding more.
 
 ## M3 — Local governance
 

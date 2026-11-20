@@ -1,6 +1,10 @@
 "use client";
 
-import type { ComponentGraph, SnapshotList } from "@archmind/contracts";
+import {
+  MAX_PROJECTION_EXPANSIONS,
+  type ComponentGraph,
+  type SnapshotList
+} from "@archmind/contracts";
 import { Network } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
@@ -42,6 +46,8 @@ const roles = ["source", "test", "story", "script", "config"] as const;
 type Role = (typeof roles)[number];
 type Component = ComponentGraph["components"][number];
 type Listing = SnapshotList | { error: string };
+const preferredSnapshotId = ({ items }: SnapshotList) =>
+  (items.find((item) => item.status === "ready") ?? items[0])?.id;
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "Something went wrong.";
 
@@ -55,9 +61,7 @@ export function Explorer({
   const [theme, setTheme] = useState(initialTheme);
   const [listing, setListing] = useState(initial);
   const [selectedId, setSelectedId] = useState(() =>
-    "items" in initial
-      ? (initial.items.find((item) => item.status === "ready") ?? initial.items[0])?.id
-      : undefined
+    "items" in initial ? preferredSnapshotId(initial) : undefined
   );
   const [listPending, setListPending] = useState(false);
   const [listError, setListError] = useState<string>();
@@ -68,14 +72,24 @@ export function Explorer({
     setListPending(true);
     setListError(undefined);
     try {
-      const page = await fetchSnapshots("", cursor);
-      setListing(
-        cursor && "items" in listing ? { ...page, items: [...listing.items, ...page.items] } : page
-      );
+      let page = await fetchSnapshots("", cursor);
+      const previousItems = "items" in listing ? listing.items : [];
+      const items = cursor ? [...previousItems, ...page.items] : [...page.items];
+      if (!cursor) {
+        // A refresh starts at page one; the active snapshot may be on a later page.
+        while (
+          page.nextCursor &&
+          (items.length < previousItems.length ||
+            (selectedId !== undefined && !items.some(({ id }) => id === selectedId)))
+        ) {
+          page = await fetchSnapshots("", page.nextCursor);
+          items.push(...page.items);
+        }
+      }
+      const next = { items, nextCursor: page.nextCursor };
+      setListing(next);
       setSelectedId((id) =>
-        cursor && id
-          ? id
-          : (page.items.find((item) => item.status === "ready") ?? page.items[0])?.id
+        items.some((item) => item.id === id) ? id : preferredSnapshotId(next)
       );
     } catch (error) {
       setListError(errorMessage(error));
@@ -123,7 +137,7 @@ export function Explorer({
         {"items" in listing && listing.items.length > 0 && (
           <div className="space-y-1.5">
             <Label htmlFor="snapshot">Snapshot</Label>
-            <Select value={selectedId} onValueChange={setSelectedId}>
+            <Select value={selectedId} onValueChange={setSelectedId} disabled={listPending}>
               <SelectTrigger id="snapshot" className="min-w-60 max-w-[85vw]">
                 <SelectValue />
               </SelectTrigger>
@@ -189,6 +203,7 @@ export function Explorer({
 
 function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const [expansionBlocked, setExpansionBlocked] = useState(false);
   const [enabledRoles, setRoles] = useState<readonly Role[]>(["source"]);
   const [typeOnly, setTypeOnly] = useState(true);
   const [internal, setInternal] = useState(true);
@@ -310,11 +325,21 @@ function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
       next.add(parent.id);
       parent = componentIndex.get(parent.parentId ?? "");
     }
+    if (next.size > MAX_PROJECTION_EXPANSIONS) {
+      setExpansionBlocked(true);
+      return;
+    }
+    setExpansionBlocked(false);
     setFocused(component.id);
     if (next.size !== expanded.size) setExpanded(next);
   }
 
   function toggle(componentId: string) {
+    if (!expanded.has(componentId) && expanded.size >= MAX_PROJECTION_EXPANSIONS) {
+      setExpansionBlocked(true);
+      return;
+    }
+    setExpansionBlocked(false);
     setFocused(null);
     setExpanded((previous) => {
       const next = new Set(previous);
@@ -341,6 +366,15 @@ function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
     >
       <Card>
         <CardContent className="space-y-5">
+          {expansionBlocked && (
+            <Alert variant="destructive">
+              <AlertTitle>Expansion limit reached</AlertTitle>
+              <AlertDescription>
+                At most {MAX_PROJECTION_EXPANSIONS} components can be expanded at once. Collapse
+                some components and try again.
+              </AlertDescription>
+            </Alert>
+          )}
           <div className="space-y-2">
             <Label htmlFor="component-search">Find a component</Label>
             <Input

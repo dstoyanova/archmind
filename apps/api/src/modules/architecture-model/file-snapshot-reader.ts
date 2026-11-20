@@ -5,7 +5,12 @@ import { open, readdir, type FileHandle } from "node:fs/promises";
 import { join } from "node:path";
 
 import { DEFAULT_SNAPSHOT_SCHEMA_VERSION, verifyContentHash } from "@archmind/architecture-engine";
-import { architectureSnapshotStructureSchema, type SnapshotIdentity } from "@archmind/contracts";
+import {
+  architectureSnapshotStructureSchema,
+  toSnapshotListItem,
+  type SnapshotIdentity,
+  type SnapshotListItem
+} from "@archmind/contracts";
 import { compareStrings, createSnapshotProjector } from "@archmind/domain";
 
 import type { SnapshotLoadResult, SnapshotReader } from "./snapshot-reader.js";
@@ -13,13 +18,13 @@ import type { SnapshotLoadResult, SnapshotReader } from "./snapshot-reader.js";
 const MAX_SNAPSHOT_BYTES = 16 * 1024 * 1024;
 const CACHE_ENTRIES = 4;
 
-interface CacheEntry {
+interface CacheEntry<T> {
   fingerprint: string;
-  result: Promise<SnapshotLoadResult>;
+  result: Promise<T>;
 }
 
-function invalid(reason: string): SnapshotLoadResult {
-  return { status: "invalid", reason };
+function invalid(reason: string) {
+  return { status: "invalid" as const, reason };
 }
 
 function fingerprint(stat: BigIntStats): string {
@@ -27,7 +32,8 @@ function fingerprint(stat: BigIntStats): string {
 }
 
 export class FileSnapshotReader implements SnapshotReader {
-  private readonly cache = new Map<string, CacheEntry>();
+  private readonly cache = new Map<string, CacheEntry<SnapshotLoadResult>>();
+  private readonly summaries = new Map<string, CacheEntry<SnapshotListItem>>();
   private readonly directory: string;
 
   constructor(directory: string) {
@@ -36,16 +42,48 @@ export class FileSnapshotReader implements SnapshotReader {
 
   async list(): Promise<readonly SnapshotIdentity[]> {
     const entries = await readdir(this.directory, { withFileTypes: true });
-    return entries
+    const identities = entries
       .filter(
         (entry) =>
           entry.isFile() && entry.name.endsWith(".json") && !entry.name.endsWith(".evaluation.json")
       )
       .map(({ name }) => ({ id: createHash("sha256").update(name).digest("hex"), label: name }))
       .sort((left, right) => compareStrings(left.label, right.label));
+    const ids = new Set(identities.map(({ id }) => id));
+    for (const id of this.summaries.keys()) {
+      if (!ids.has(id)) this.summaries.delete(id);
+    }
+    return identities;
   }
 
-  async load(identity: SnapshotIdentity): Promise<SnapshotLoadResult> {
+  summarize(identity: SnapshotIdentity): Promise<SnapshotListItem> {
+    return this.read(
+      identity,
+      this.summaries,
+      (reason) => ({ ...identity, ...invalid(reason) }),
+      async (handle, stat, current) => {
+        const loaded = this.cache.get(identity.id);
+        const result = await (loaded?.fingerprint === current
+          ? loaded.result
+          : readSnapshot(handle, stat, current));
+        return result.status === "ready"
+          ? toSnapshotListItem(identity, result.data.snapshot)
+          : { ...identity, ...result };
+      }
+    );
+  }
+
+  load(identity: SnapshotIdentity): Promise<SnapshotLoadResult> {
+    return this.read(identity, this.cache, invalid, readSnapshot, CACHE_ENTRIES);
+  }
+
+  private async read<T>(
+    identity: SnapshotIdentity,
+    cache: Map<string, CacheEntry<T>>,
+    unavailable: (reason: string) => T,
+    read: (handle: FileHandle, stat: BigIntStats, current: string) => Promise<T>,
+    capacity?: number
+  ): Promise<T> {
     let handle: FileHandle;
     try {
       handle = await open(
@@ -58,8 +96,8 @@ export class FileSnapshotReader implements SnapshotReader {
         "code" in error &&
         ["ENOENT", "ELOOP", "EACCES", "EPERM"].some((code) => code === error.code)
       ) {
-        this.cache.delete(identity.id);
-        return invalid("Snapshot file is no longer available or readable.");
+        cache.delete(identity.id);
+        return unavailable("Snapshot file is no longer available or readable.");
       }
       throw error;
     }
@@ -67,31 +105,31 @@ export class FileSnapshotReader implements SnapshotReader {
     try {
       const stat = await handle.stat({ bigint: true });
       if (!stat.isFile() || stat.size > MAX_SNAPSHOT_BYTES) {
-        this.cache.delete(identity.id);
-        return invalid(
+        cache.delete(identity.id);
+        return unavailable(
           stat.isFile() ? "Snapshot exceeds the 16 MiB size limit." : "Not a regular snapshot file."
         );
       }
 
       const current = fingerprint(stat);
-      const cached = this.cache.get(identity.id);
-      this.cache.delete(identity.id);
+      const cached = cache.get(identity.id);
+      cache.delete(identity.id);
       if (cached?.fingerprint === current) {
-        this.cache.set(identity.id, cached);
+        cache.set(identity.id, cached);
         return cached.result;
       }
 
-      const entry = { fingerprint: current, result: readSnapshot(handle, stat, current) };
-      this.cache.set(identity.id, entry);
-      const oldest = this.cache.keys().next().value;
-      if (this.cache.size > CACHE_ENTRIES && oldest !== undefined) {
-        this.cache.delete(oldest);
+      const entry = { fingerprint: current, result: read(handle, stat, current) };
+      cache.set(identity.id, entry);
+      if (capacity !== undefined && cache.size > capacity) {
+        const oldest = cache.keys().next().value;
+        if (oldest !== undefined) cache.delete(oldest);
       }
       try {
         return await entry.result;
       } catch (error) {
-        if (this.cache.get(identity.id) === entry) {
-          this.cache.delete(identity.id);
+        if (cache.get(identity.id) === entry) {
+          cache.delete(identity.id);
         }
         throw error;
       }
