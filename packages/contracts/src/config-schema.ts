@@ -68,7 +68,8 @@ export const analysisConfigSchema = z
   .object({
     components: componentsSchema.default([]),
     componentRoots: componentRootsSchema.default({}),
-    fileRoles: fileRolesSchema.default({})
+    fileRoles: fileRolesSchema.default({}),
+    exclude: z.array(z.string().trim().min(1)).optional()
   })
   .strict();
 

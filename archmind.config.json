@@ -1,0 +1,8 @@
+{
+  "analysis": {
+    "componentRoots": {
+      "apps/api": "src/modules"
+    },
+    "exclude": ["apps/cli/fixtures/**"]
+  }
+}

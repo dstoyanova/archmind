@@ -61,3 +61,9 @@ File roles are classified deterministically as `source`, `test`, `story`, `scrip
 - **Stable IDs.** A configured component's ID is derived from its name (`configured:<name>`), not its position in the array, so reordering the configuration does not rename components. Baselines depend on this.
 - **Parent diagnostics.** A configured `parent` that names no configured component, or that sits on a parent cycle, produces a `CONFIG_COMPONENT_PARENT_UNKNOWN` or `CONFIG_COMPONENT_PARENT_CYCLE` warning, and the component is attached to the root.
 - **Nested packages.** Folder components are built only from files owned by the package itself. Files owned by a nested package never create folders in an outer package.
+
+## Addendum (2026-11-20): source exclusions
+
+- **`analysis.exclude`** is an optional list of non-empty glob patterns. Discovery skips source files matching any pattern against the repository-relative POSIX path, including dotfiles. The patterns are additive; leading `!` does not re-include files.
+- The list is included in `analysisConfigHash` and `sourceHash` when supplied. Excluded source bytes do not enter `sourceHash`; resolution metadata such as `package.json` and `tsconfig*.json` still does. Omitting the setting preserves existing hashes.
+- Exclusions do not hide files from import resolution. Imports into omitted source files produce `IMPORT_TARGET_EXCLUDED`.

@@ -55,7 +55,7 @@ Every milestone ends with a **working, demoable product**. No milestone consists
 - [x] Read-only NestJS API serving validated snapshot files from a directory.
 - [x] Interactive hierarchical graph: auto-layout, expand and collapse, search, cycle highlighting, and filters for file role and type-only imports.
 - [x] Snapshot overview, component details, dependency evidence and drill-down to files.
-- [ ] ArchMind's own `archmind.config.json`, with `componentRoots` and `analysis.exclude`.
+- [x] ArchMind's own `archmind.config.json`, with `componentRoots` and `analysis.exclude`.
 - [ ] The inferred hierarchy is validated on real repositories.
 
 **Outcome:** browse the architecture of any repository analysed in M1.

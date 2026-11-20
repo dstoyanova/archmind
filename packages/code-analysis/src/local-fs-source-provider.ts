@@ -6,7 +6,7 @@ import path from "node:path";
 import type { AnalysisConfig } from "@archmind/contracts";
 import { canonicalJson, compareStrings } from "@archmind/domain";
 import ignore, { type Ignore } from "ignore";
-import { minimatch } from "minimatch";
+import { Minimatch, minimatch } from "minimatch";
 
 import {
   PACKAGE_MANIFEST_FILE_NAME,
@@ -82,6 +82,7 @@ interface IgnoreScope {
 interface DiscoveryState {
   repositoryRoot: string;
   limits: SourceProviderLimits;
+  exclude: readonly Minimatch[];
   diagnostics: SourceProviderDiagnostic[];
   candidates: SourceFileCandidate[];
   resolutionInputs: ResolutionInputFile[];
@@ -99,6 +100,9 @@ export class LocalFsSourceProvider implements SourceProvider {
     const state: DiscoveryState = {
       repositoryRoot,
       limits: this.resolveLimits(input.limits),
+      exclude: (input.analysisConfig.exclude ?? []).map(
+        (pattern) => new Minimatch(pattern, { dot: true, nonegate: true, nocomment: true })
+      ),
       diagnostics: [],
       candidates: [],
       resolutionInputs: []
@@ -195,7 +199,11 @@ export class LocalFsSourceProvider implements SourceProvider {
         });
       }
 
-      if (!isAnalysableSourceFile(relativePath) || isGeneratedFile(relativePath)) {
+      if (
+        !isAnalysableSourceFile(relativePath) ||
+        state.exclude.some((pattern) => pattern.match(relativePath)) ||
+        isGeneratedFile(relativePath)
+      ) {
         continue;
       }
 

@@ -187,9 +187,9 @@ Add a root `archmind.config.json`, so ArchMind's own bounded contexts appear as 
 
 - **Depends on:** M2.3
 - **Acceptance criteria:**
-  - [ ] An `analysis.exclude` glob list in `archmind.config.json` is applied by the source provider, so it is part of `analysisConfigHash` and `sourceHash`, and an import into an excluded file still gets `IMPORT_TARGET_EXCLUDED`. The field is recorded in an ADR-0005 addendum.
-  - [ ] The root config sets `componentRoots` for `apps/api` (`src/modules`) and excludes `apps/cli/fixtures/**`.
-  - [ ] Analysing ArchMind shows each `apps/api` module as a child component and no fixture components. CI analyses the ArchMind repository itself.
+  - [x] An `analysis.exclude` glob list in `archmind.config.json` is applied by the source provider, so it is part of `analysisConfigHash` and `sourceHash`, and an import into an excluded file still gets `IMPORT_TARGET_EXCLUDED`. The field is recorded in an ADR-0005 addendum.
+  - [x] The root config sets `componentRoots` for `apps/api` (`src/modules`) and excludes `apps/cli/fixtures/**`.
+  - [x] Analysing ArchMind shows each `apps/api` module as a child component and no fixture components. CI analyses the ArchMind repository itself.
 
 ### M2.7 Validate the hierarchy on real repositories
 

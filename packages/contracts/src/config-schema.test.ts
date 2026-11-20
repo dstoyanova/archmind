@@ -42,6 +42,15 @@ describe("archmindConfigSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  it("accepts exclusion globs but rejects blank patterns and non-list values", () => {
+    expect(
+      archmindConfigSchema.parse({ analysis: { exclude: ["fixtures/**"] } }).analysis.exclude
+    ).toEqual(["fixtures/**"]);
+    for (const exclude of ["fixtures/**", ["  "]]) {
+      expect(archmindConfigSchema.safeParse({ analysis: { exclude } }).success).toBe(false);
+    }
+  });
+
   it("rejects a source file role override", () => {
     const result = archmindConfigSchema.safeParse({
       analysis: { fileRoles: { source: ["src/**"] } }

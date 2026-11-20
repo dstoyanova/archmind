@@ -95,6 +95,36 @@ describe("analyzeRepository workspace handling", () => {
 });
 
 describe("analyzeRepository configuration", () => {
+  it("hashes exclusion settings and diagnoses imports into excluded files", async () => {
+    await writeRepoFile("src/index.ts", "import './fixtures/helper.js';\n");
+    await writeRepoFile("src/fixtures/helper.ts", "export const helper = 1;\n");
+    await writeRepoFile("tools/fixtures/helper.ts", "export const helper = 2;\n");
+    const analyze = async () => (await analyzeRepository({ repositoryRoot: root })).snapshot;
+    const setExclusions = (exclude: string[]) =>
+      writeRepoFile("archmind.config.json", JSON.stringify({ analysis: { exclude } }));
+
+    const defaultSnapshot = await analyze();
+    await setExclusions(["unmatched/**"]);
+    const unmatched = await analyze();
+    expect(unmatched.files).toEqual(defaultSnapshot.files);
+    expect(unmatched.analysisConfigHash).not.toBe(defaultSnapshot.analysisConfigHash);
+    expect(unmatched.source.sourceHash).not.toBe(defaultSnapshot.source.sourceHash);
+
+    await setExclusions(["src/fixtures/**"]);
+    const excluded = await analyze();
+    expect(excluded.files.map(({ path }) => path)).toEqual([
+      "src/index.ts",
+      "tools/fixtures/helper.ts"
+    ]);
+    expect(excluded.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "IMPORT_TARGET_EXCLUDED", filePath: "src/index.ts" })
+    );
+    expect(excluded.dependencies).toEqual([]);
+
+    await writeRepoFile("src/fixtures/helper.ts", "export const helper = 3;\n");
+    expect((await analyze()).source.sourceHash).toBe(excluded.source.sourceHash);
+  });
+
   it("reports invalid configuration readably instead of throwing a raw ZodError", async () => {
     await writeRepoFile(
       "archmind.config.json",
