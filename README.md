@@ -60,6 +60,14 @@ See [docs/development/cli-analyze.md](./docs/development/cli-analyze.md) for ful
 
 ## Local explorer API
 
+To run the browser explorer and API together:
+
+```bash
+ARCHMIND_SNAPSHOT_DIR=/absolute/path/to/snapshots pnpm dev --filter @archmind/api --filter @archmind/web
+```
+
+Open [the explorer](http://127.0.0.1:3000). The web app forwards explorer requests to the local API at `http://127.0.0.1:3001`; set `ARCHMIND_API_ORIGIN` if the API uses a different port.
+
 Point the read-only API at an existing directory of CLI-generated snapshot JSON files:
 
 ```bash

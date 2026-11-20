@@ -3,7 +3,12 @@
     "dev": {
       "cache": false,
       "persistent": true,
-      "passThroughEnv": ["ARCHMIND_SNAPSHOT_DIR", "ARCHMIND_WEB_ORIGIN", "PORT"]
+      "passThroughEnv": [
+        "ARCHMIND_SNAPSHOT_DIR",
+        "ARCHMIND_WEB_ORIGIN",
+        "ARCHMIND_API_ORIGIN",
+        "PORT"
+      ]
     },
     "build": {
       "dependsOn": ["^build"],

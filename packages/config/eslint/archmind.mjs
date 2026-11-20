@@ -84,6 +84,8 @@ const archmindConfig = [
   {
     ignores: [
       "**/dist/**",
+      "**/.next/**",
+      "**/next-env.d.ts",
       "**/build/**",
       "**/.turbo/**",
       "**/node_modules/**",

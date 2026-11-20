@@ -685,7 +685,8 @@ Small libraries are confirmed in the task that introduces them:
 - Ignore-file and glob matching.
 - YAML parsing (`pnpm-workspace.yaml`).
 - Tar extraction.
-- Graph layout (elkjs or dagre).
+- Graph layout: ELK.js compound layout. React Flow renders dependencies separately from node placement so dense edge sets do not drive layout time.
+- Explorer data fetching: native `fetch`, with the first snapshot page loaded on the server and cancellable graph requests through a same-origin Next.js route. Shared Zod schemas validate responses.
 - Logging (pino).
 - The dev-only reference tool for the resolution benchmark.
 

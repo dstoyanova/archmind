@@ -161,13 +161,13 @@ Create `apps/web` (Next.js, Tailwind, shadcn/ui, React Flow) with the hierarchic
 
 - **Depends on:** M2.3
 - **Acceptance criteria:**
-  - [ ] shadcn/ui is initialised in `apps/web`. UI uses its components. Custom components exist only where shadcn/ui has no equivalent, such as React Flow nodes.
-  - [ ] Auto-layout with nested components, expand and collapse, zoom, pan, and search by component name and path. File search is out of scope for M2.
-  - [ ] Cycle highlighting of members and the edges between them, with `typeOnly` cycles styled differently.
-  - [ ] Filters for internal and external dependencies, file role and type-only imports. The default shows the production graph.
-  - [ ] Loading, empty and error states, including invalid snapshot files.
-  - [ ] Playwright is set up with the API and web app running against a fixture snapshot directory, and runs in CI.
-  - [ ] With a generated snapshot of 300 components and 3,000 dependencies, the first render takes under 2 seconds and each expand or collapse under 500 ms on a developer laptop (provisional budgets). Results are recorded in `docs/development/`.
+  - [x] shadcn/ui is initialised in `apps/web`. UI uses its components. Custom components exist only where shadcn/ui has no equivalent, such as React Flow nodes.
+  - [x] Auto-layout with nested components, expand and collapse, zoom, pan, and search by component name and path. File search is out of scope for M2.
+  - [x] Cycle highlighting of members and the edges between them, with `typeOnly` cycles styled differently.
+  - [x] Filters for internal and external dependencies, file role and type-only imports. The default shows the production graph.
+  - [x] Loading, empty and error states, including invalid snapshot files.
+  - [x] Playwright is set up with the API and web app running against a fixture snapshot directory, and runs in CI.
+  - [x] With a generated snapshot of 300 components and 3,000 dependencies, the first render takes under 2 seconds and each expand or collapse under 500 ms on a developer laptop (provisional budgets). See the [benchmark results](development/explorer-performance.md).
 
 ### M2.5 Add snapshot overview, component and dependency details
 

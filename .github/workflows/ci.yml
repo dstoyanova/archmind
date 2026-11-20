@@ -39,5 +39,14 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Build explorer
+        run: pnpm build --filter=@archmind/api --filter=@archmind/web
+
+      - name: Install Chromium
+        run: pnpm --filter @archmind/web exec playwright install --with-deps chromium
+
+      - name: Test explorer in Chromium
+        run: pnpm --filter @archmind/web test:e2e
+
       - name: Analyze fixture with the CLI
         run: pnpm archmind analyze apps/cli/fixtures/single-package --out "$RUNNER_TEMP/snapshot.json" --format summary
