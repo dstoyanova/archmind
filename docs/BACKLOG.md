@@ -197,8 +197,15 @@ Check that the inferred hierarchy makes sense to people (§7, "The inferred hier
 
 - **Depends on:** M2.5, M2.6
 - **Acceptance criteria:**
-  - [ ] ArchMind, vitest and changesets are explored with the default hierarchy, and with `componentRoots` where the default is unhelpful.
-  - [ ] Observations, such as noisy folder components, misleading names or missing edges, are recorded in `docs/development/` with follow-up backlog items.
+  - [x] ArchMind, Vitest and Changesets are explored with the default hierarchy, and with `componentRoots` where the default is unhelpful.
+  - [x] Observations and reproduction steps are recorded in the [M2.7 hierarchy validation report](./development/m2-hierarchy-validation.md).
+
+#### Follow-ups from real repository validation
+
+- [ ] Preserve useful sibling components when drilling deeper into a subtree. Validate a design that exposes Vitest's `node/reporters` without flattening `runtime`, and Changesets' CLI commands without flattening `lib`. Review any hierarchy model change against ADR-0005.
+- [ ] Reduce fixture noise in the production view. Reproduce with Vitest's `test/e2e/fixtures` and fixture packages; keep them discoverable when intentionally inspecting test infrastructure.
+- [ ] Qualify duplicate component labels in graph and dependency details as well as in search and list results. Verify that Changesets' two `pre` components are distinguishable without guessing their paths.
+- [ ] Explain missing edges next to resolution statistics. Distinguish unmapped source entries (`vitest/config`), excluded declaration targets, and non-code workspace imports (`@changesets/cli/package.json`); do not imply that a 0% unresolved rate means complete edge coverage.
 
 ## M3 — Local governance
 
