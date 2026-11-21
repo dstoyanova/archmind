@@ -2,6 +2,7 @@ import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import os from "node:os";
 import path from "node:path";
 
+import { architectureSnapshotSchema } from "@archmind/contracts";
 import { describe, expect, it } from "vitest";
 
 import { analyzeRepository, formatSnapshotSummary, runAnalyzeCommand } from "./analyze.js";
@@ -278,6 +279,48 @@ describe("analyzeRepository reproducibility", () => {
 });
 
 describe("runCli", () => {
+  it("ignores rules during analysis but rejects a misspelled config root key", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "archmind-rule-config-"));
+    try {
+      const repo = path.join(root, "repo");
+      const output = path.join(root, "snapshot.json");
+      const configPath = path.join(repo, "archmind.config.json");
+      await cp(fixturePath("single-package"), repo, { recursive: true });
+      const errors: string[] = [];
+      async function analyze() {
+        errors.length = 0;
+        return runCli(["analyze", repo, "--out", output], {
+          stdout: () => {},
+          stderr: (message) => errors.push(message)
+        });
+      }
+      async function snapshotHashes() {
+        const { source, analysisConfigHash, contentHash } = architectureSnapshotSchema.parse(
+          JSON.parse(await readFile(output, "utf8"))
+        );
+        return { sourceHash: source.sourceHash, analysisConfigHash, contentHash };
+      }
+      expect(await analyze()).toBe(0);
+      const original = await snapshotHashes();
+
+      for (const rules of [
+        { disableDefaults: ["archmind/no-cycles"] },
+        { disableDefaults: ["archmind/high-coupling"] },
+        "not a rules object"
+      ]) {
+        await writeFile(configPath, JSON.stringify({ rules }));
+        expect(await analyze()).toBe(0);
+        expect(errors).toEqual([]);
+        expect(await snapshotHashes()).toEqual(original);
+      }
+
+      await writeFile(configPath, JSON.stringify({ rulse: {} }));
+      await expect(analyze()).rejects.toThrow(/Unrecognized key.*rulse/u);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("returns non-zero for unknown commands", async () => {
     const stdout: string[] = [];
     const stderr: string[] = [];

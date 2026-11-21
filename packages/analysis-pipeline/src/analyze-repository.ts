@@ -16,7 +16,7 @@ import {
   resolveFileImports
 } from "@archmind/code-analysis";
 import {
-  archmindConfigSchema,
+  archmindAnalysisConfigSchema,
   type AnalysisConfig,
   type ArchitectureSnapshotDocument
 } from "@archmind/contracts";
@@ -129,7 +129,7 @@ async function loadArchmindConfig(
     configContent = await readFile(configPath, "utf8");
   } catch (error) {
     if (isNodeError(error) && error.code === "ENOENT") {
-      return { analysisConfig: archmindConfigSchema.parse({}).analysis };
+      return { analysisConfig: archmindAnalysisConfigSchema.parse({}).analysis };
     }
 
     throw error;
@@ -142,7 +142,7 @@ async function loadArchmindConfig(
     throw new Error(`Invalid JSON in "archmind.config.json": ${toErrorMessage(error)}`);
   }
 
-  const parsed = archmindConfigSchema.safeParse(configJson);
+  const parsed = archmindAnalysisConfigSchema.safeParse(configJson);
   if (!parsed.success) {
     const issues = parsed.error.issues.map(
       (issue) => `- ${issue.path.length > 0 ? issue.path.join(".") : "(root)"}: ${issue.message}`

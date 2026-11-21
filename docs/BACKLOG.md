@@ -219,22 +219,22 @@ Items from the [M2 code review](./code-reviews/m2-code-review.md), which has the
 
 M3 builds on M2's shared outputs. The `domain` projector and cycle detection come from M2.1, and the compact evidence shape from M2.2. M2.3 provides the reader pattern (opaque IDs, validated on load) and fixtures generated from the CLI. M2.6 provides `analysis.exclude`, which keeps violation fixtures out of self-analysis, and the M2.7 repositories serve for calibration. All M2 review items (E1 to E6) are closed, so none carry over. Design details are in §4.9 of the plan.
 
-### M3.1 Define the governance rule model ⚠ Approval (ADR-0006)
+### M3.1 Define the governance rule model ([ADR-0006](./adr/ADR-0006-governance-rules-and-evaluations.md))
 
 Add the `rules` section of `archmind.config.json`: layers, forbidden dependencies, no cycles, thresholds and restricted packages. Rules can target any hierarchy level, and dependency and cycle rules can change their graph scope (FR-G1, FR-G4).
 
-> **Before starting:** write ADR-0006 and get it approved. It defines rule evaluations as separate, immutable records and answers the open questions in §4.9: selector syntax and layer semantics, reporting a cycle that appears at several depths once, the high-coupling measure, the evidence cap, and what the rule version means for user-defined rules.
+ADR-0006 was approved before implementation. Rule execution, including selector matching and the built-in rule implementations, follows in M3.2.
 
 - **Depends on:** M2.6
 - **Acceptance criteria:**
-  - [ ] Each rule has a unique `id`, a `type` and a `severity`. Dependency and cycle rules can opt in to file roles other than `source` and opt out of type-only imports. Threshold rules have no scope options.
-  - [ ] Selectors match component paths (with globs) or configured component names, never display names.
-  - [ ] Default rules can be disabled by their reserved ID. Configuring other rules does not disable them.
-  - [ ] The rules are validated with zod in `contracts`. Error messages name the rule `id` and the field.
-  - [ ] The config root rejects unknown keys, so a misspelt `rules` key is an error.
-  - [ ] `archmind analyze` validates the root and `analysis` only, and still succeeds with an invalid `rules` section.
-  - [ ] `rulesHash` covers only the normalised `rules` section. Tests show that adding or editing rules leaves `sourceHash`, `analysisConfigHash` and `contentHash` unchanged, and that reformatting the rules leaves `rulesHash` unchanged.
-  - [ ] The evaluation document schema is in `contracts`. It records `schemaVersion`, `governanceEngineVersion`, `rulesHash`, the snapshot's `contentHash` and `analysisConfigHash`, findings and rule diagnostics.
+  - [x] Each rule has a unique `id`, a `type` and a `severity`. Dependency and cycle rules can opt in to file roles other than `source` and opt out of type-only imports. Threshold rules have no scope options.
+  - [x] The selector schema accepts component paths (with globs) or configured component names, never display names.
+  - [x] Default rules can be disabled by their reserved ID. Configuring other rules does not disable them.
+  - [x] The rules are validated with zod in `contracts`. Error messages name the rule `id` and the field.
+  - [x] The config root rejects unknown keys, so a misspelt `rules` key is an error.
+  - [x] `archmind analyze` validates the root and `analysis` only, and still succeeds with an invalid `rules` section.
+  - [x] `rulesHash` covers only the normalised `rules` section. Tests show that adding or editing rules leaves `sourceHash`, `analysisConfigHash` and `contentHash` unchanged, and that reformatting the rules leaves `rulesHash` unchanged.
+  - [x] The evaluation document schema is in `contracts`. It records `schemaVersion`, `governanceEngineVersion`, `rulesHash`, the snapshot's `contentHash` and `analysisConfigHash`, findings and rule diagnostics.
 
 ### M3.2 Implement the governance engine
 

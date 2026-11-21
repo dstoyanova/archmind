@@ -88,7 +88,7 @@ Packages should be introduced as needed rather than created as empty placeholder
 - **CLI:** Local analysis and rule checks, including in CI.
 - **Code Analysis:** Parse source files and extract symbols and dependencies.
 - **Architecture Engine:** Build the hierarchical component model, dependency graph, metrics and cycles.
-- **Governance Engine:** Evaluate architectural rules against a snapshot and produce a rule evaluation with findings (_proposed_, ADR-0006).
+- **Governance Engine:** Evaluate architectural rules against a snapshot and produce a separate immutable evaluation with findings. The configuration and evaluation contracts are defined in [ADR-0006](./adr/ADR-0006-governance-rules-and-evaluations.md); rule execution follows in M3.2.
 - **Agent Runtime:** Provide AI-assisted exploration and recommendations.
 - **Database:** Persist workspaces, analyses, snapshots and findings.
 

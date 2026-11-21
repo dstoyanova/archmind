@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { rulesConfigSchema } from "./rules-schema.js";
+
 const rolePatternSchema = z.array(z.string().min(1));
 
 export const configuredComponentSchema = z
@@ -92,7 +94,8 @@ export const analysisConfigSchema = z
   })
   .strict();
 
-export const archmindConfigSchema = z
+/** Validates the root without interpreting governance policy. */
+export const archmindAnalysisConfigSchema = z
   .object({
     analysis: analysisConfigSchema.default({
       components: [],
@@ -101,7 +104,11 @@ export const archmindConfigSchema = z
     }),
     rules: z.unknown().optional()
   })
-  .passthrough();
+  .strict();
+
+export const archmindConfigSchema = archmindAnalysisConfigSchema.extend({
+  rules: rulesConfigSchema
+});
 
 export type ConfiguredComponent = z.infer<typeof configuredComponentSchema>;
 export type AnalysisConfig = z.infer<typeof analysisConfigSchema>;
