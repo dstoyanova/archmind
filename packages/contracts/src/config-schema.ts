@@ -49,6 +49,24 @@ const componentRootsSchema = z
     return normalizedRoots;
   });
 
+/** Repository-relative folders whose immediate subfolders become child components. */
+const nestedFoldersSchema = z.array(z.string().min(1)).transform((folders, ctx) => {
+  const normalizedFolders = new Set<string>();
+  for (const folder of folders) {
+    const key = normalizeConfigPath(folder);
+    if (normalizedFolders.has(key)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate nested folder "${key}".`
+      });
+    }
+
+    normalizedFolders.add(key);
+  }
+
+  return [...normalizedFolders];
+});
+
 const componentsSchema = z.array(configuredComponentSchema).superRefine((components, ctx) => {
   const seenNames = new Set<string>();
   for (const [index, component] of components.entries()) {
@@ -69,7 +87,8 @@ export const analysisConfigSchema = z
     components: componentsSchema.default([]),
     componentRoots: componentRootsSchema.default({}),
     fileRoles: fileRolesSchema.default({}),
-    exclude: z.array(z.string().trim().min(1)).optional()
+    exclude: z.array(z.string().trim().min(1)).optional(),
+    nestedFolders: nestedFoldersSchema.optional()
   })
   .strict();
 

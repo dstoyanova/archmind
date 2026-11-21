@@ -171,4 +171,69 @@ describe("mapFilesToComponentHierarchy", () => {
     expect(parentOf("configured:loop-a")).toBe("root");
     expect(parentOf("configured:loop-b")).toBe("configured:loop-a");
   });
+
+  it("nests subfolders under a listed folder while keeping its siblings", () => {
+    const result = mapFilesToComponentHierarchy({
+      analysisConfig: analysisConfig({ nestedFolders: ["packages/vitest/src/node"] }),
+      packageDirectories: ["packages/vitest"],
+      filePaths: [
+        "packages/vitest/src/node/core.ts",
+        "packages/vitest/src/node/reporters/base.ts",
+        "packages/vitest/src/node/reporters/renderers/utils.ts",
+        "packages/vitest/src/runtime/worker.ts",
+        "packages/vitest/src/index.ts"
+      ]
+    });
+
+    expect(
+      result.components
+        .filter((component) => component.kind === "folder")
+        .map(({ id, parentId, depth }) => ({ id, parentId, depth }))
+    ).toEqual([
+      { id: "folder:packages/vitest/src/node", parentId: "package:packages/vitest", depth: 2 },
+      { id: "folder:packages/vitest/src/runtime", parentId: "package:packages/vitest", depth: 2 },
+      {
+        id: "folder:packages/vitest/src/node/reporters",
+        parentId: "folder:packages/vitest/src/node",
+        depth: 3
+      }
+    ]);
+    expect(
+      Object.fromEntries(result.ownership.map((item) => [item.filePath, item.componentId]))
+    ).toEqual({
+      "packages/vitest/src/index.ts": "package:packages/vitest",
+      "packages/vitest/src/node/core.ts": "folder:packages/vitest/src/node",
+      "packages/vitest/src/node/reporters/base.ts": "folder:packages/vitest/src/node/reporters",
+      "packages/vitest/src/node/reporters/renderers/utils.ts":
+        "folder:packages/vitest/src/node/reporters",
+      "packages/vitest/src/runtime/worker.ts": "folder:packages/vitest/src/runtime"
+    });
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it("applies nested folders shallowest first and reports entries that are not folder components", () => {
+    const result = mapFilesToComponentHierarchy({
+      analysisConfig: analysisConfig({
+        nestedFolders: [
+          "packages/a/src/x/y",
+          "packages/a/src/x",
+          "packages/a/src/missing",
+          "packages/a"
+        ]
+      }),
+      packageDirectories: ["packages/a"],
+      filePaths: ["packages/a/src/x/y/z/deep.ts", "packages/a/src/x/y/shallow.ts"]
+    });
+
+    expect(
+      result.components.filter((component) => component.kind === "folder").map((c) => c.depth)
+    ).toEqual([2, 3, 4]);
+    expect(result.ownership.find((item) => item.filePath.endsWith("deep.ts"))?.componentId).toBe(
+      "folder:packages/a/src/x/y/z"
+    );
+    expect(result.diagnostics.map((diagnostic) => diagnostic.message)).toEqual([
+      'Nested folder "packages/a" is not a folder component; ignoring it.',
+      'Nested folder "packages/a/src/missing" is not a folder component; ignoring it.'
+    ]);
+  });
 });

@@ -73,3 +73,84 @@ if (dense.components.length !== 300 || dense.dependencies.length !== 3000) {
   throw new Error("Performance snapshot has an unexpected graph size.");
 }
 await writeFile(join(directory, "performance.json"), JSON.stringify(dense));
+
+// Two components named "pre", and a package that only has test files.
+const sharedComponents: SnapshotBuilderInput["components"] = [
+  { id: "root", name: "Repository", kind: "root", depth: 0, paths: ["."] },
+  {
+    id: "pre-package",
+    name: "pre",
+    kind: "package",
+    depth: 1,
+    parentId: "root",
+    paths: ["packages/pre"]
+  },
+  { id: "cli", name: "cli", kind: "package", depth: 1, parentId: "root", paths: ["packages/cli"] },
+  {
+    id: "fixtures",
+    name: "fixtures",
+    kind: "package",
+    depth: 1,
+    parentId: "root",
+    paths: ["packages/fixtures"]
+  },
+  {
+    id: "pre-command",
+    name: "pre",
+    kind: "folder",
+    depth: 2,
+    parentId: "cli",
+    paths: ["packages/cli/src/commands/pre"]
+  },
+  {
+    id: "lib",
+    name: "lib",
+    kind: "folder",
+    depth: 2,
+    parentId: "cli",
+    paths: ["packages/cli/src/lib"]
+  }
+];
+const sharedFiles: SnapshotBuilderInput["files"] = [
+  { path: "packages/pre/src/index.ts", role: "source", loc: 10 },
+  { path: "packages/cli/src/main.ts", role: "source", loc: 10 },
+  { path: "packages/cli/src/commands/pre/index.ts", role: "source", loc: 10 },
+  { path: "packages/cli/src/lib/index.ts", role: "source", loc: 10 },
+  { path: "packages/fixtures/index.test.ts", role: "test", loc: 10 }
+];
+const sharedOwners = ["pre-package", "cli", "pre-command", "lib", "fixtures"];
+const sharedImport = (from: number, to: number, line: number) => ({
+  filePath: sharedFiles[from]!.path,
+  resolvedFilePath: sharedFiles[to]!.path,
+  specifier: "./target",
+  resolution: "internal-file" as const,
+  kind: "static" as const,
+  line,
+  column: 1
+});
+await writeFile(
+  join(directory, "shared-names.json"),
+  JSON.stringify(
+    buildArchitectureSnapshot({
+      engineVersion: "fixture",
+      parserVersion: "fixture",
+      analysisConfigHash: "fixture",
+      source: { kind: "local", sourceHash: "fixture" },
+      components: sharedComponents,
+      ownership: sharedFiles.map(({ path }, index) => ({
+        filePath: path,
+        componentId: sharedOwners[index]!
+      })),
+      files: sharedFiles,
+      fileImports: [
+        sharedImport(1, 0, 1),
+        sharedImport(2, 0, 2),
+        sharedImport(1, 2, 3),
+        sharedImport(1, 3, 4)
+      ],
+      symbols: [],
+      diagnostics: [],
+      resolutionStats: { countsByResolution: { "internal-file": 4 }, unresolvedRate: 0 }
+    })
+  )
+);

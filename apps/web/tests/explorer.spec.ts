@@ -1,8 +1,8 @@
 import { env, stdout } from "node:process";
 import { URL, URLSearchParams } from "node:url";
 
-import { snapshotListSchema } from "@archmind/contracts";
-import { expect, test } from "@playwright/test";
+import { snapshotListSchema, snapshotOverviewSchema } from "@archmind/contracts";
+import { expect, test, type Page } from "@playwright/test";
 
 test("follows the system theme by default and remembers explicit overrides", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "light" });
@@ -163,6 +163,116 @@ test("opens overview, inspects dependency evidence, and drills into the file gra
   ).toBeVisible();
   await files.getByRole("button", { name: "Back to component graph" }).click();
   await expect(page.getByRole("region", { name: "Component graph list" })).toBeVisible();
+});
+
+test("explains missing edges next to the resolution statistics and diagnostic totals", async ({
+  page
+}) => {
+  await page.route(/\/api\/workspaces\/local\/snapshots\/[^/?]+$/, async (route) => {
+    const response = await route.fetch();
+    const overview = snapshotOverviewSchema.parse(await response.json());
+    await route.fulfill({
+      response,
+      json: {
+        ...overview,
+        diagnosticCount: 600,
+        diagnosticCountsByCode: { IMPORT_TARGET_EXCLUDED: 18, WORKSPACE_ENTRY_UNMAPPED: 582 }
+      }
+    });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Snapshot overview" }).click();
+  await expect(page.getByText(/does not mean every import became an edge/)).toBeVisible();
+  await expect(page.getByText(/Becomes a component dependency/).first()).toBeVisible();
+  const codes = page.getByRole("list", { name: "Diagnostics by code" });
+  await expect(codes.getByRole("listitem")).toHaveCount(2);
+  await expect(codes.getByText("WORKSPACE_ENTRY_UNMAPPED", { exact: true })).toBeVisible();
+  await expect(codes).toContainText("582");
+  await expect(codes).toContainText("package export that points at build output");
+});
+
+async function openSharedNames(page: Page) {
+  await page.goto("/");
+  await page.getByRole("combobox", { name: "Snapshot" }).click();
+  await page.getByRole("option", { name: "shared-names.json", exact: true }).click();
+  const graph = page.getByRole("region", { name: "Architecture graph" });
+  await graph.getByRole("button", { name: "Expand cli" }).click();
+  await expect(graph.getByTestId("component-node")).toHaveCount(5);
+  return graph;
+}
+
+test("qualifies repeated component names in graph, list and evidence labels", async ({ page }) => {
+  const graph = await openSharedNames(page);
+  const expected = ["pre (packages/pre)", "pre (packages/cli/src/commands/pre)"];
+  for (const label of expected) {
+    await expect(graph.getByRole("button", { name: `Details for ${label}` })).toBeVisible();
+  }
+  await expect(graph.getByRole("button", { name: "Details for lib" })).toBeVisible();
+
+  const edgeLabels = await graph
+    .locator(".react-flow__edge.internal")
+    .evaluateAll((edges) => edges.map((edge) => edge.getAttribute("aria-label")));
+  expect(edgeLabels).toEqual(
+    expect.arrayContaining([
+      "cli depends on pre (packages/pre); 1 imports",
+      "pre (packages/cli/src/commands/pre) depends on pre (packages/pre); 1 imports"
+    ])
+  );
+  expect(new Set(edgeLabels).size).toBe(edgeLabels.length);
+
+  await page.getByRole("button", { name: "Show component list" }).click();
+  const list = page.getByRole("region", { name: "Component graph list" });
+  for (const label of expected) {
+    await expect(list.getByRole("button", { name: `${label} details` })).toBeVisible();
+  }
+  await list.getByRole("button", { name: "pre (packages/pre) details" }).click();
+  const panel = page.getByRole("complementary", { name: "Component details" });
+  const evidenceButtons = panel.getByRole("button", { name: /^View evidence:/ });
+  await expect(evidenceButtons).toHaveCount(2);
+  const evidence = await evidenceButtons.evaluateAll((buttons) =>
+    buttons.map((button) => button.getAttribute("aria-label"))
+  );
+  expect(evidence).toEqual([
+    "View evidence: cli to pre (packages/pre)",
+    "View evidence: pre (packages/cli/src/commands/pre) to pre (packages/pre)"
+  ]);
+});
+
+test("lays expanded children out inside their parent", async ({ page }) => {
+  const graph = await openSharedNames(page);
+  const box = async (name: string) => {
+    const node = graph
+      .locator(".react-flow__node")
+      .filter({ has: page.getByRole("button", { name: `Details for ${name}`, exact: true }) });
+    const rectangle = await node.boundingBox();
+    if (!rectangle) throw new Error(`Missing node ${name}.`);
+    return rectangle;
+  };
+  const parent = await box("cli");
+  for (const child of ["lib", "pre (packages/cli/src/commands/pre)"]) {
+    const inner = await box(child);
+    expect(inner.x).toBeGreaterThanOrEqual(parent.x);
+    expect(inner.y).toBeGreaterThanOrEqual(parent.y);
+    expect(inner.x + inner.width).toBeLessThanOrEqual(parent.x + parent.width);
+    expect(inner.y + inner.height).toBeLessThanOrEqual(parent.y + parent.height);
+  }
+});
+
+test("hides components without files in the selected roles until asked", async ({ page }) => {
+  const graph = await openSharedNames(page);
+  const nodes = graph.getByTestId("component-node");
+  await expect(nodes.filter({ hasText: "packages/fixtures" })).toHaveCount(0);
+  const search = page.getByRole("searchbox", { name: "Find a component" });
+  await search.fill("fixtures");
+  await expect(page.getByRole("status")).toContainText(
+    "Components without files in the selected roles are hidden"
+  );
+
+  await page
+    .getByRole("checkbox", { name: "Show components without files in these roles" })
+    .click();
+  await expect(nodes.filter({ hasText: "packages/fixtures" })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: /fixtures \/ packages\/fixtures/ })).toBeVisible();
 });
 
 test("measures first paint and expand/collapse for the 300-component fixture", async ({ page }) => {

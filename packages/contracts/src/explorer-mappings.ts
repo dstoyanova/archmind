@@ -1,3 +1,4 @@
+import { compareStrings } from "@archmind/domain";
 import type {
   ArchitectureComponent,
   ArchitectureFile,
@@ -24,7 +25,11 @@ export function toProjectGraphOptions(query: ProjectionQuery): ProjectGraphOptio
   return {
     depth: query.depth,
     expanded: query.expand,
-    filters: { includeFileRoles: query.roles, includeTypeOnly: query.includeTypeOnly }
+    filters: {
+      includeFileRoles: query.roles,
+      includeTypeOnly: query.includeTypeOnly,
+      includeEmptyComponents: query.includeEmptyComponents
+    }
   };
 }
 
@@ -50,6 +55,17 @@ export function toSnapshotListItem(
   return { ...snapshotMetadata(identity, snapshot), status: "ready" };
 }
 
+function countDiagnosticsByCode(snapshot: ArchitectureSnapshot): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const { code } of snapshot.diagnostics) {
+    counts[code] = (counts[code] ?? 0) + 1;
+  }
+
+  return Object.fromEntries(
+    Object.entries(counts).sort(([left], [right]) => compareStrings(left, right))
+  );
+}
+
 export function toSnapshotOverview(
   identity: SnapshotIdentity,
   snapshot: ArchitectureSnapshot
@@ -63,7 +79,8 @@ export function toSnapshotOverview(
     resolutionStats: snapshot.resolutionStats,
     componentCount: snapshot.components.length,
     fileCount: snapshot.files.length,
-    diagnosticCount: snapshot.diagnostics.length
+    diagnosticCount: snapshot.diagnostics.length,
+    diagnosticCountsByCode: countDiagnosticsByCode(snapshot)
   };
 }
 

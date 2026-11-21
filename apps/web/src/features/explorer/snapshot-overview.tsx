@@ -5,6 +5,7 @@ import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { fetchDiagnostics, fetchOverview } from "./api";
+import { diagnosticEffects, resolutionEffects } from "./coverage";
 import { LoadContent, LoadPage } from "./detail-content";
 
 export function SnapshotOverviewPanel({ id }: { id: string }) {
@@ -63,11 +64,21 @@ export function SnapshotOverviewPanel({ id }: { id: string }) {
                       ))}
                     </dl>
                     <h2 className="font-semibold">Import resolution</h2>
-                    <ul className="text-sm">
+                    <p className="text-sm text-muted-foreground">
+                      A low unresolved rate does not mean every import became an edge. Only some
+                      resolutions can produce component dependencies.
+                    </p>
+                    <ul className="space-y-1 text-sm">
                       {Object.entries(snapshot.resolutionStats.countsByResolution).map(
                         ([kind, count]) => (
                           <li key={kind}>
-                            {kind}: {count}
+                            <strong>{kind}</strong>: {count}
+                            {resolutionEffects[kind] && (
+                              <span className="text-muted-foreground">
+                                {" "}
+                                · {resolutionEffects[kind]}
+                              </span>
+                            )}
                           </li>
                         )
                       )}
@@ -76,25 +87,40 @@ export function SnapshotOverviewPanel({ id }: { id: string }) {
                     {snapshot.diagnosticCount === 0 ? (
                       <p className="text-sm">No diagnostics.</p>
                     ) : (
-                      <LoadPage
-                        load={diagnostics}
-                        nextCursor={(page) => page.nextCursor}
-                        render={(page) => (
-                          <ul className="space-y-2 text-sm">
-                            {page.items.map((item, index) => (
-                              <li key={index}>
-                                <strong>{item.code}</strong> ({item.severity}): {item.message}
-                                {item.filePath && (
-                                  <div className="wrap-anywhere">
-                                    {item.filePath}
-                                    {item.line === undefined ? "" : `:${item.line}`}
-                                  </div>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      />
+                      <>
+                        <ul aria-label="Diagnostics by code" className="space-y-2 text-sm">
+                          {Object.entries(snapshot.diagnosticCountsByCode).map(([code, count]) => (
+                            <li key={code}>
+                              <strong>{code}</strong>: {count}
+                              {diagnosticEffects[code] && (
+                                <div className="text-muted-foreground">
+                                  {diagnosticEffects[code]}
+                                </div>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                        <h3 className="font-semibold">Diagnostic details</h3>
+                        <LoadPage
+                          load={diagnostics}
+                          nextCursor={(page) => page.nextCursor}
+                          render={(page) => (
+                            <ul className="space-y-2 text-sm">
+                              {page.items.map((item, index) => (
+                                <li key={index}>
+                                  <strong>{item.code}</strong> ({item.severity}): {item.message}
+                                  {item.filePath && (
+                                    <div className="wrap-anywhere">
+                                      {item.filePath}
+                                      {item.line === undefined ? "" : `:${item.line}`}
+                                    </div>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        />
+                      </>
                     )}
                   </div>
                 );

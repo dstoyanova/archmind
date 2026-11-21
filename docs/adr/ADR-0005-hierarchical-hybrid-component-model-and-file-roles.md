@@ -67,3 +67,12 @@ File roles are classified deterministically as `source`, `test`, `story`, `scrip
 - **`analysis.exclude`** is an optional list of non-empty glob patterns. Discovery skips source files matching any pattern against the repository-relative POSIX path, including dotfiles. The patterns are additive; leading `!` does not re-include files.
 - The list is included in `analysisConfigHash` and `sourceHash` when supplied. Excluded source bytes do not enter `sourceHash`; resolution metadata such as `package.json` and `tsconfig*.json` still does. Omitting the setting preserves existing hashes.
 - Exclusions do not hide files from import resolution. Imports into omitted source files produce `IMPORT_TARGET_EXCLUDED`.
+
+## Addendum (2026-11-20): nested folder components
+
+- **Problem.** Setting `componentRoots` deeper (Vitest `packages/vitest` at `src/node`) exposes the subfolders of that folder but makes every other folder under `src` (`runtime`, `utils` and so on) part of the package component. See the [M2.7 validation report](../development/m2-hierarchy-validation.md).
+- **`analysis.nestedFolders`** is an optional list of repository-relative folder paths, for example `["packages/vitest/src/node"]`. Each entry must name a folder component, either a depth-2 folder or one created by an earlier entry. Its immediate subfolders become child folder components one level deeper, and all sibling folders stay. Entries apply shallowest first, so `["a/src/x", "a/src/x/y"]` creates two further levels.
+- Ownership is unchanged: a file belongs to the deepest matching folder component within its package. Files directly in a listed folder stay with that folder. Folders owned by a nested package never create components in the outer package.
+- An entry that names no folder component produces a `CONFIG_NESTED_FOLDER_UNKNOWN` warning and is ignored.
+- The value is normalised like `componentRoots`, and duplicates are rejected. It is included in `analysisConfigHash` when supplied; omitting it preserves existing hashes. Component IDs stay `folder:<path>`, so they do not change when the setting is added.
+- The component depth limit of 2 in the decision above is therefore a default, not a maximum.

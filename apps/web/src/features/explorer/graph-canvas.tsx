@@ -31,7 +31,7 @@ const InteractionContext = createContext<Interaction | null>(null);
 
 const GraphComponent = memo(function GraphComponent({ id, data }: NodeProps<ComponentNode>) {
   const interaction = useContext(InteractionContext);
-  const { component } = data;
+  const { component, label } = data;
   const expanded = interaction?.expanded.has(id) ?? false;
   const cycle = interaction?.cycles.get(id);
   return (
@@ -48,8 +48,8 @@ const GraphComponent = memo(function GraphComponent({ id, data }: NodeProps<Comp
             variant="ghost"
             size="sm"
             className="nodrag nopan h-auto max-w-full justify-start p-0 text-sm font-semibold"
-            title={component.name}
-            aria-label={`Details for ${component.name}`}
+            title={label}
+            aria-label={`Details for ${label}`}
             onClick={() => interaction?.select(id)}
           >
             <span className="truncate">{component.name}</span>
@@ -72,7 +72,7 @@ const GraphComponent = memo(function GraphComponent({ id, data }: NodeProps<Comp
             className="nodrag nopan"
             variant="ghost"
             size="icon-sm"
-            aria-label={`${expanded ? "Collapse" : "Expand"} ${component.name}`}
+            aria-label={`${expanded ? "Collapse" : "Expand"} ${label}`}
             aria-expanded={expanded}
             onClick={() => interaction.toggle(id)}
           >

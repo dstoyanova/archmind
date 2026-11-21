@@ -92,7 +92,7 @@ describe("explorer queries", () => {
     expect(toProjectGraphOptions(graph)).toEqual({
       depth: 2,
       expanded: ["a", "b"],
-      filters: { includeFileRoles: ["test"], includeTypeOnly: false }
+      filters: { includeFileRoles: ["test"], includeTypeOnly: false, includeEmptyComponents: true }
     });
     expect(toProjectGraphOptions(evidence)).toEqual(toProjectGraphOptions(graph));
     expect(evidence).toMatchObject({ from: "a", to: "b", cursor: "opaque", limit: 5 });
@@ -100,6 +100,7 @@ describe("explorer queries", () => {
 
   it.each([
     { includeTypeOnly: "0" },
+    { includeEmptyComponents: "no" },
     { depth: "" },
     { roles: "unknown" },
     { level: "file" },
@@ -138,7 +139,12 @@ describe("explorer mappings", () => {
       ["second", "shared-hash"]
     ]);
     expect(snapshotOverviewSchema.parse(overview)).toEqual(overview);
-    expect(overview).toMatchObject({ diagnosticCount: 1, fileCount: 2, componentCount: 3 });
+    expect(overview).toMatchObject({
+      diagnosticCount: 1,
+      diagnosticCountsByCode: { EXAMPLE: 1 },
+      fileCount: 2,
+      componentCount: 3
+    });
     expect(overview).not.toHaveProperty("diagnostics");
   });
 

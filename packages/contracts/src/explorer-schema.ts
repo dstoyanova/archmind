@@ -62,7 +62,13 @@ export const projectionQuerySchema = z
       .preprocess(repeatedQueryParameter, z.array(fileRoleSchema).nonempty())
       .default(["source"])
       .describe("Import source roles. Repeat this parameter for multiple roles."),
-    includeTypeOnly: z.preprocess(parseBoolean, z.boolean()).default(true)
+    includeTypeOnly: z.preprocess(parseBoolean, z.boolean()).default(true),
+    includeEmptyComponents: z
+      .preprocess(parseBoolean, z.boolean())
+      .default(true)
+      .describe(
+        "When false, omits components with no file in the selected roles, unless a dependency ends at them."
+      )
   })
   .strict();
 
@@ -122,7 +128,10 @@ export const snapshotOverviewSchema = snapshotMetadataSchema.extend({
   resolutionStats: resolutionStatsSchema,
   componentCount: count,
   fileCount: count,
-  diagnosticCount: count
+  diagnosticCount: count,
+  diagnosticCountsByCode: z
+    .record(id, count)
+    .describe("Diagnostic totals by code, covering every diagnostic in the snapshot.")
 });
 
 export const explorerComponentSchema = architectureComponentSchema.extend({

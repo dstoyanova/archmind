@@ -19,6 +19,11 @@ export interface ProjectGraphFilters {
   includeFileRoles?: readonly FileRole[];
   includeImportKinds?: readonly ImportKind[];
   includeTypeOnly?: boolean;
+  /**
+   * When false and `includeFileRoles` is set, components whose subtree has no file with an
+   * included role are omitted, unless a remaining dependency ends at them. Defaults to true.
+   */
+  includeEmptyComponents?: boolean;
 }
 
 export interface ProjectGraphOptions {
@@ -94,15 +99,25 @@ export function createSnapshotProjector(snapshot: ArchitectureSnapshot): Snapsho
   return {
     projectGraph(options) {
       const visibleComponentIds = collectVisible(snapshot, options);
-      const components = snapshot.components
-        .filter((component) => visibleComponentIds.has(component.id))
-        .sort(compareComponents);
       const dependencies = projectDependencies(
         snapshot.dependencies,
         indexes,
         visibleComponentIds,
         createImportFilter(options.filters)
       );
+      const shownComponentIds =
+        options.filters?.includeEmptyComponents === false
+          ? omitComponentsWithoutRoleFiles(
+              snapshot,
+              indexes,
+              visibleComponentIds,
+              dependencies,
+              options.filters
+            )
+          : visibleComponentIds;
+      const components = snapshot.components
+        .filter((component) => shownComponentIds.has(component.id))
+        .sort(compareComponents);
 
       return {
         components,
@@ -127,6 +142,44 @@ export function createSnapshotProjector(snapshot: ArchitectureSnapshot): Snapsho
       return projectFiles(componentId, indexes, collectVisible(snapshot, options), options.filters);
     }
   };
+}
+
+function omitComponentsWithoutRoleFiles(
+  snapshot: ArchitectureSnapshot,
+  indexes: SnapshotIndexes,
+  visibleComponentIds: ReadonlySet<string>,
+  dependencies: readonly ProjectedDependency[],
+  filters: ProjectGraphFilters
+): Set<string> {
+  const roles = new Set(filters.includeFileRoles);
+  if (roles.size === 0) {
+    return new Set(visibleComponentIds);
+  }
+
+  const shown = new Set<string>();
+  const keepWithAncestors = (componentId: string | undefined) => {
+    for (
+      let id = componentId;
+      id !== undefined && !shown.has(id);
+      id = indexes.parentById.get(id)
+    ) {
+      if (visibleComponentIds.has(id)) {
+        shown.add(id);
+      }
+    }
+  };
+
+  for (const file of snapshot.files) {
+    if (roles.has(file.role)) {
+      keepWithAncestors(file.componentId);
+    }
+  }
+  // A dependency ends at its target even when the target has no file in the selected roles.
+  for (const dependency of dependencies) {
+    keepWithAncestors(dependency.toComponentId);
+  }
+
+  return shown;
 }
 
 function collectVisible(snapshot: ArchitectureSnapshot, options: ProjectGraphOptions): Set<string> {

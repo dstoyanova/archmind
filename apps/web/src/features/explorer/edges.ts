@@ -1,11 +1,13 @@
 import type { ComponentGraph } from "@archmind/contracts";
 import { MarkerType, type Edge } from "@xyflow/react";
 
+import { componentLabels } from "./labels";
+
 export function graphEdges(graph: ComponentGraph): Edge[] {
   const cycles = new Map(
     graph.cycles.flatMap((cycle) => cycle.memberIds.map((id) => [id, cycle] as const))
   );
-  const names = new Map(graph.components.map(({ id, name }) => [id, name]));
+  const labels = componentLabels(graph.components);
   return [
     ...graph.dependencies.map(({ fromComponentId: source, toComponentId: target, weight }) => {
       const cycle = cycles.get(source);
@@ -22,7 +24,7 @@ export function graphEdges(graph: ComponentGraph): Edge[] {
         type: "straight",
         className: tone,
         markerEnd: { type: MarkerType.ArrowClosed },
-        ariaLabel: `${names.get(source)} depends on ${names.get(target)}; ${weight} imports`
+        ariaLabel: `${labels.get(source)} depends on ${labels.get(target)}; ${weight} imports`
       };
     }),
     ...graph.externalDependencies.map(({ componentId: source, packageName, weight }) => ({
@@ -32,7 +34,7 @@ export function graphEdges(graph: ComponentGraph): Edge[] {
       type: "straight",
       className: "external",
       markerEnd: { type: MarkerType.ArrowClosed },
-      ariaLabel: `${names.get(source)} depends on ${packageName}; ${weight} imports`
+      ariaLabel: `${labels.get(source)} depends on ${packageName}; ${weight} imports`
     }))
   ];
 }

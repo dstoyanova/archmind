@@ -26,7 +26,10 @@ export interface MapFilesToComponentHierarchyInput {
 
 export interface HierarchyDiagnostic {
   severity: "warning";
-  code: "CONFIG_COMPONENT_PARENT_UNKNOWN" | "CONFIG_COMPONENT_PARENT_CYCLE";
+  code:
+    | "CONFIG_COMPONENT_PARENT_UNKNOWN"
+    | "CONFIG_COMPONENT_PARENT_CYCLE"
+    | "CONFIG_NESTED_FOLDER_UNKNOWN";
   message: string;
 }
 
@@ -80,9 +83,24 @@ export function mapFilesToComponentHierarchy(
     componentById
   );
 
-  createFolderComponents(packageContexts, filePaths, packageDirectories, components, componentById);
-
   const diagnostics: HierarchyDiagnostic[] = [];
+  const packageIdByFolderId = createFolderComponents(
+    packageContexts,
+    filePaths,
+    packageDirectories,
+    components,
+    componentById
+  );
+  createNestedFolderComponents(
+    input.analysisConfig.nestedFolders ?? [],
+    filePaths,
+    packageDirectories,
+    components,
+    componentById,
+    packageIdByFolderId,
+    diagnostics
+  );
+
   const configuredComponents = createConfiguredComponents(
     input.analysisConfig,
     components,
@@ -120,7 +138,12 @@ export function mapFilesToComponentHierarchy(
       };
     }
 
-    const folderMatch = findOwningFolderComponent(filePath, folderComponents, packageComponentId);
+    const folderMatch = findOwningFolderComponent(
+      filePath,
+      folderComponents,
+      packageComponentId,
+      packageIdByFolderId
+    );
     if (folderMatch) {
       return {
         filePath,
@@ -186,7 +209,8 @@ function createFolderComponents(
   packageDirectories: string[],
   components: InternalComponent[],
   componentById: Map<string, InternalComponent>
-): void {
+): Map<string, string> {
+  const packageIdByFolderId = new Map<string, string>();
   for (const pkg of packageContexts) {
     const ownedFilePaths = filePaths.filter(
       (filePath) =>
@@ -209,6 +233,61 @@ function createFolderComponents(
       };
       components.push(component);
       componentById.set(component.id, component);
+      packageIdByFolderId.set(component.id, pkg.id);
+    }
+  }
+
+  return packageIdByFolderId;
+}
+
+/**
+ * Gives each listed folder component child components for its immediate subfolders. Entries are
+ * applied shallowest first, so a listed folder may itself be created by an earlier entry.
+ */
+function createNestedFolderComponents(
+  nestedFolders: readonly string[],
+  filePaths: string[],
+  packageDirectories: string[],
+  components: InternalComponent[],
+  componentById: Map<string, InternalComponent>,
+  packageIdByFolderId: Map<string, string>,
+  diagnostics: HierarchyDiagnostic[]
+): void {
+  const ordered = [...nestedFolders]
+    .map(normalizePath)
+    .sort(
+      (left, right) =>
+        left.split("/").length - right.split("/").length || compareStrings(left, right)
+    );
+
+  for (const folderPath of ordered) {
+    const parent = componentById.get(buildComponentId("folder", folderPath));
+    const packageId = parent && packageIdByFolderId.get(parent.id);
+    const packageDirectory = packageId && componentById.get(packageId)?.paths[0];
+    if (!parent || !packageId || packageDirectory === undefined) {
+      diagnostics.push({
+        severity: "warning",
+        code: "CONFIG_NESTED_FOLDER_UNKNOWN",
+        message: `Nested folder "${folderPath}" is not a folder component; ignoring it.`
+      });
+      continue;
+    }
+
+    const ownedFilePaths = filePaths.filter(
+      (filePath) => findOwningPackageDirectory(filePath, packageDirectories) === packageDirectory
+    );
+    for (const childPath of findImmediateFoldersUnderRoot(ownedFilePaths, folderPath)) {
+      const child: InternalComponent = {
+        id: buildComponentId("folder", childPath),
+        name: childPath.split("/").at(-1) ?? childPath,
+        parentId: parent.id,
+        depth: parent.depth + 1,
+        kind: "folder",
+        paths: [childPath]
+      };
+      components.push(child);
+      componentById.set(child.id, child);
+      packageIdByFolderId.set(child.id, packageId);
     }
   }
 }
@@ -363,12 +442,13 @@ function findOwningPackageDirectory(filePath: string, packageDirectories: string
 function findOwningFolderComponent(
   filePath: string,
   folderComponents: InternalComponent[],
-  parentPackageComponentId: string
+  parentPackageComponentId: string,
+  packageIdByFolderId: ReadonlyMap<string, string>
 ): InternalComponent | null {
   const matches = folderComponents
     .filter(
       (component) =>
-        component.parentId === parentPackageComponentId &&
+        packageIdByFolderId.get(component.id) === parentPackageComponentId &&
         component.paths.some((folderPath) => containsPath(folderPath, filePath))
     )
     .sort((left, right) => {

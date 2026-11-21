@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { fetchComponentDetail, fetchComponentFiles, fetchEvidence } from "./api";
 import { LoadContent, LoadPage } from "./detail-content";
+import { componentLabels } from "./labels";
 
 type Dependency = ComponentDetail["inboundDependencies"][number];
 
@@ -15,7 +16,7 @@ export function ComponentPanel({
   component,
   name,
   projection,
-  names,
+  labels,
   onSelect,
   onClose,
   onDrillDown
@@ -24,7 +25,7 @@ export function ComponentPanel({
   component: string;
   name: string;
   projection: string;
-  names: ReadonlyMap<string, string>;
+  labels: ReadonlyMap<string, string>;
   onSelect: (id: string) => void;
   onClose: () => void;
   onDrillDown: () => void;
@@ -54,7 +55,7 @@ export function ComponentPanel({
           <ul className="space-y-2 text-sm">
             {items.map((item) => {
               const target = item[endpoint];
-              const label = names.get(target) ?? target;
+              const label = labels.get(target) ?? target;
               return (
                 <li key={target}>
                   <p className="wrap-anywhere">
@@ -64,7 +65,7 @@ export function ComponentPanel({
                     variant="outline"
                     size="sm"
                     onClick={() => setEdge(item)}
-                    aria-label={`View evidence: ${names.get(item.fromComponentId) ?? item.fromComponentId} to ${names.get(item.toComponentId) ?? item.toComponentId}`}
+                    aria-label={`View evidence: ${labels.get(item.fromComponentId) ?? item.fromComponentId} to ${labels.get(item.toComponentId) ?? item.toComponentId}`}
                   >
                     View evidence
                   </Button>
@@ -91,97 +92,100 @@ export function ComponentPanel({
             Open file graph
           </Button>
           <LoadContent load={load}>
-            {(detail) => (
-              <div className="space-y-4">
-                <section className="space-y-2">
-                  <h3 className="font-semibold">Metrics</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Production graph at this component&apos;s depth. Unchanged by filters.
-                  </p>
-                  <dl className="grid grid-cols-2 gap-2 text-sm">
-                    {(
-                      [
-                        ["Files", detail.component.metrics.fileCount],
-                        ["Lines of code", detail.component.metrics.loc],
-                        ["Fan-in", detail.component.metrics.fanIn],
-                        ["Fan-out", detail.component.metrics.fanOut],
-                        ["Instability", detail.component.metrics.instability.toFixed(2)]
-                      ] as const
-                    ).map(([label, value]) => (
-                      <div key={label}>
-                        <dt>{label}</dt>
-                        <dd className="font-semibold">{value}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                </section>
-                <section>
-                  <h3 className="font-semibold">Child components</h3>
-                  {detail.children.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No child components.</p>
-                  ) : (
-                    <ul>
-                      {detail.children.map((child) => (
-                        <li key={child.id}>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="max-w-full"
-                            onClick={() => onSelect(child.id)}
-                          >
-                            <span className="truncate">{child.name}</span>
-                          </Button>
-                        </li>
+            {(detail) => {
+              const childLabels = componentLabels(detail.children);
+              return (
+                <div className="space-y-4">
+                  <section className="space-y-2">
+                    <h3 className="font-semibold">Metrics</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Production graph at this component&apos;s depth. Unchanged by filters.
+                    </p>
+                    <dl className="grid grid-cols-2 gap-2 text-sm">
+                      {(
+                        [
+                          ["Files", detail.component.metrics.fileCount],
+                          ["Lines of code", detail.component.metrics.loc],
+                          ["Fan-in", detail.component.metrics.fanIn],
+                          ["Fan-out", detail.component.metrics.fanOut],
+                          ["Instability", detail.component.metrics.instability.toFixed(2)]
+                        ] as const
+                      ).map(([label, value]) => (
+                        <div key={label}>
+                          <dt>{label}</dt>
+                          <dd className="font-semibold">{value}</dd>
+                        </div>
                       ))}
-                    </ul>
+                    </dl>
+                  </section>
+                  <section>
+                    <h3 className="font-semibold">Child components</h3>
+                    {detail.children.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No child components.</p>
+                    ) : (
+                      <ul>
+                        {detail.children.map((child) => (
+                          <li key={child.id}>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="max-w-full"
+                              onClick={() => onSelect(child.id)}
+                            >
+                              <span className="truncate">{childLabels.get(child.id)}</span>
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                  {dependencies(
+                    "Inbound dependencies",
+                    detail.inboundDependencies,
+                    "fromComponentId"
                   )}
-                </section>
-                {dependencies(
-                  "Inbound dependencies",
-                  detail.inboundDependencies,
-                  "fromComponentId"
-                )}
-                {dependencies(
-                  "Outbound dependencies",
-                  detail.outboundDependencies,
-                  "toComponentId"
-                )}
-                <section>
-                  <h3 className="font-semibold">External dependencies</h3>
-                  {detail.externalDependencies.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">None in this projection.</p>
-                  ) : (
-                    <ul className="text-sm">
-                      {detail.externalDependencies.map((item) => (
-                        <li key={item.packageName} className="wrap-anywhere">
-                          {item.packageName} ({item.weight} imports)
-                        </li>
-                      ))}
-                    </ul>
+                  {dependencies(
+                    "Outbound dependencies",
+                    detail.outboundDependencies,
+                    "toComponentId"
                   )}
-                </section>
-                <section aria-label="Component files">
-                  <h3 className="font-semibold">Files in component subtree</h3>
-                  <LoadPage
-                    load={files}
-                    nextCursor={(page) => page.nextCursor}
-                    render={(page) =>
-                      page.items.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No files.</p>
-                      ) : (
-                        <ul className="text-sm">
-                          {page.items.map((file) => (
-                            <li key={file.id} className="wrap-anywhere">
-                              {file.path} ({file.role})
-                            </li>
-                          ))}
-                        </ul>
-                      )
-                    }
-                  />
-                </section>
-              </div>
-            )}
+                  <section>
+                    <h3 className="font-semibold">External dependencies</h3>
+                    {detail.externalDependencies.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">None in this projection.</p>
+                    ) : (
+                      <ul className="text-sm">
+                        {detail.externalDependencies.map((item) => (
+                          <li key={item.packageName} className="wrap-anywhere">
+                            {item.packageName} ({item.weight} imports)
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                  <section aria-label="Component files">
+                    <h3 className="font-semibold">Files in component subtree</h3>
+                    <LoadPage
+                      load={files}
+                      nextCursor={(page) => page.nextCursor}
+                      render={(page) =>
+                        page.items.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No files.</p>
+                        ) : (
+                          <ul className="text-sm">
+                            {page.items.map((file) => (
+                              <li key={file.id} className="wrap-anywhere">
+                                {file.path} ({file.role})
+                              </li>
+                            ))}
+                          </ul>
+                        )
+                      }
+                    />
+                  </section>
+                </div>
+              );
+            }}
           </LoadContent>
           {edge && (
             <Evidence
@@ -189,7 +193,7 @@ export function ComponentPanel({
               id={id}
               edge={edge}
               projection={projection}
-              names={names}
+              labels={labels}
             />
           )}
         </CardContent>
@@ -202,12 +206,12 @@ function Evidence({
   id,
   edge,
   projection,
-  names
+  labels
 }: {
   id: string;
   edge: Dependency;
   projection: string;
-  names: ReadonlyMap<string, string>;
+  labels: ReadonlyMap<string, string>;
 }) {
   const { fromComponentId: from, toComponentId: to } = edge;
   const load = useCallback(
@@ -226,7 +230,7 @@ function Evidence({
     >
       <h3 className="font-semibold">Dependency evidence</h3>
       <p className="text-sm wrap-anywhere">
-        {names.get(from) ?? from} → {names.get(to) ?? to}
+        {labels.get(from) ?? from} → {labels.get(to) ?? to}
       </p>
       <LoadPage
         load={load}

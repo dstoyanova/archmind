@@ -79,4 +79,18 @@ describe("archmindConfigSchema", () => {
 
     expect(parsed.analysis.componentRoots).toEqual({ "apps/api": "src/modules" });
   });
+
+  it("normalises nestedFolders, rejects duplicates and keeps the field optional", () => {
+    expect(
+      archmindConfigSchema.parse({
+        analysis: { nestedFolders: ["./packages/vitest/src/node/"] }
+      }).analysis.nestedFolders
+    ).toEqual(["packages/vitest/src/node"]);
+    expect(
+      archmindConfigSchema.safeParse({
+        analysis: { nestedFolders: ["a/b", "./a/b/"] }
+      }).success
+    ).toBe(false);
+    expect(archmindConfigSchema.parse({}).analysis).not.toHaveProperty("nestedFolders");
+  });
 });

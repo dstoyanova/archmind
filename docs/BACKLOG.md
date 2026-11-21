@@ -202,17 +202,17 @@ Check that the inferred hierarchy makes sense to people (§7, "The inferred hier
 
 #### Follow-ups from real repository validation
 
-- [ ] Preserve useful sibling components when drilling deeper into a subtree. Validate a design that exposes Vitest's `node/reporters` without flattening `runtime`, and Changesets' CLI commands without flattening `lib`. Review any hierarchy model change against ADR-0005.
-- [ ] Reduce fixture noise in the production view. Reproduce with Vitest's `test/e2e/fixtures` and fixture packages; keep them discoverable when intentionally inspecting test infrastructure.
-- [ ] Explain missing edges next to resolution statistics. Distinguish unmapped source entries (`vitest/config`), excluded declaration targets, and non-code workspace imports (`@changesets/cli/package.json`); do not imply that a 0% unresolved rate means complete edge coverage.
+- [x] Preserve useful sibling components when drilling deeper into a subtree. `analysis.nestedFolders` adds children under a listed folder and keeps its siblings (Vitest `node/reporters` next to `runtime`, Changesets' commands next to `lib`). Validated on both repositories in the [report](./development/m2-hierarchy-validation.md#keeping-siblings-while-going-deeper) and recorded in an ADR-0005 addendum.
+- [x] Reduce fixture noise in the production view. Components with no file in the selected roles are hidden unless a dependency ends at them, and can be shown with a checkbox, by selecting the `test` role, or through `includeEmptyComponents=true`. Vitest's depth-1 view goes from 43 to 23 components.
+- [x] Explain missing edges next to resolution statistics. The snapshot overview states what each resolution does to the graph and lists diagnostic totals by code, with the effect of each. Non-code workspace imports (`@changesets/cli/package.json`) still share `WORKSPACE_ENTRY_UNMAPPED` with unmapped entries (`vitest/config`); the explanation names both. Separating them would change the resolver and the engine version.
 
 Items from the [M2 code review](./code-reviews/m2-code-review.md), which has the problem statements, actions and acceptance criteria:
 
 - [x] **E1 (P2):** Cache snapshot list summaries by file fingerprint, so listing more than four snapshots doesn't re-parse every file.
 - [x] **E2 (P2):** Keep the selected snapshot and graph state when refreshing the snapshot list.
-- [ ] **E3 (P2):** Review graph layout readability with screenshots of Vitest and Changesets, and decide whether to keep ELK `box` packing.
-- [ ] **E4 (P2):** Qualify duplicate component names in graph node titles, edge labels and evidence buttons, as well as in search and list results. Verify that Changesets' two `pre` components are distinguishable without guessing their paths.
-- [ ] **E5 (P2):** Complete the M2.7 evidence: trace the Vitest and Changesets edge-count changes, tune more packages, and note that diagnostics were sampled from the first page only.
+- [x] **E3 (P2):** Review graph layout readability with screenshots of Vitest and Changesets, and decide whether to keep ELK `box` packing. Replaced by a layered layout up to 500 internal edges; see the [layout decision](./development/explorer-performance.md#layout-decision).
+- [x] **E4 (P2):** Qualify duplicate component names in graph node titles, edge labels and evidence buttons, as well as in search and list results. Verify that Changesets' two `pre` components are distinguishable without guessing their paths.
+- [x] **E5 (P2):** Complete the M2.7 evidence: trace the Vitest and Changesets edge-count changes, tune more packages, and note that diagnostics were sampled from the first page only.
 - [x] **E6 (P3):** Limit explorer projections to 128 repeated `expand` values. Larger lists within the HTTP request-size budget return `400 INVALID_REQUEST`; the UI prompts users to collapse components before expanding more.
 
 ## M3 — Local governance

@@ -26,6 +26,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { fetchGraph, fetchSnapshots } from "./api";
 import { graphEdges } from "./edges";
+import { componentLabels } from "./labels";
 import { ComponentPanel } from "./component-panel";
 import { SnapshotOverviewPanel } from "./snapshot-overview";
 import type { ExplorerNode } from "./layout";
@@ -205,6 +206,7 @@ function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [expansionBlocked, setExpansionBlocked] = useState(false);
   const [enabledRoles, setRoles] = useState<readonly Role[]>(["source"]);
+  const [showEmpty, setShowEmpty] = useState(false);
   const [typeOnly, setTypeOnly] = useState(true);
   const [internal, setInternal] = useState(true);
   const [external, setExternal] = useState(true);
@@ -222,21 +224,24 @@ function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
   }>();
   const [error, setError] = useState<{ message: string; key: string }>();
   const [attempt, setAttempt] = useState(0);
-  const query = useMemo(() => {
-    const params = new URLSearchParams({ includeTypeOnly: String(typeOnly) });
+  const roleQuery = useMemo(() => {
+    const params = new URLSearchParams({ includeEmptyComponents: String(showEmpty) });
     for (const role of enabledRoles) params.append("roles", role);
+    return params.toString();
+  }, [enabledRoles, showEmpty]);
+  const query = useMemo(() => {
+    const params = new URLSearchParams(roleQuery);
+    params.set("includeTypeOnly", String(typeOnly));
     for (const component of expanded) params.append("expand", component);
     return params.toString();
-  }, [enabledRoles, expanded, typeOnly]);
+  }, [roleQuery, expanded, typeOnly]);
   const generation = JSON.stringify([query, external, attempt]);
 
   useEffect(() => {
     const controller = new AbortController();
-    void fetchGraph(
-      id,
-      new URLSearchParams({ depth: String(Number.MAX_SAFE_INTEGER) }),
-      controller.signal
-    ).then(
+    const params = new URLSearchParams(roleQuery);
+    params.set("depth", String(Number.MAX_SAFE_INTEGER));
+    void fetchGraph(id, params, controller.signal).then(
       (graph) => {
         if (!controller.signal.aborted) {
           setCatalog(graph.components);
@@ -248,7 +253,7 @@ function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
       }
     );
     return () => controller.abort();
-  }, [id, attempt]);
+  }, [id, attempt, roleQuery]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -278,10 +283,7 @@ function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
     [catalog]
   );
   const visible = result?.graph.components;
-  const names = useMemo(
-    () => new Map(visible?.map(({ id: componentId, name }) => [componentId, name])),
-    [visible]
-  );
+  const labels = useMemo(() => componentLabels(visible ?? []), [visible]);
   const detail = detailId
     ? (componentIndex.get(detailId) ?? visible?.find((item) => item.id === detailId))
     : undefined;
@@ -403,7 +405,9 @@ function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
                 </ul>
               ) : (
                 <p role="status" className="text-sm text-muted-foreground">
-                  {catalog ? "No matching components." : "Searching available components…"}
+                  {catalog
+                    ? `No matching components.${showEmpty ? "" : " Components without files in the selected roles are hidden."}`
+                    : "Searching available components…"}
                 </p>
               ))}
             {catalogError && (
@@ -438,6 +442,17 @@ function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
                 }
               />
             ))}
+            <Filter
+              label="Show components without files in these roles"
+              checked={showEmpty}
+              onChange={setShowEmpty}
+            />
+            {!showEmpty && (
+              <p className="text-xs text-muted-foreground">
+                Components with no file in the selected roles, such as test fixtures, are hidden
+                unless a dependency points at them.
+              </p>
+            )}
           </fieldset>
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline" className="cycle-legend runtime-cycle">
@@ -454,7 +469,7 @@ function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
           key={JSON.stringify([detail.id, query])}
           id={id}
           component={detail.id}
-          name={detail.name}
+          name={labels.get(detail.id) ?? detail.name}
           projection={query}
           theme={theme}
           onBack={() => setShowFiles(false)}
@@ -476,7 +491,7 @@ function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
                 {visible?.map((component) => (
                   <li key={component.id} className="flex flex-wrap items-center gap-2">
                     <Button variant="outline" size="sm" onClick={() => setDetailId(component.id)}>
-                      {component.name} details
+                      {labels.get(component.id)} details
                     </Button>
                     <span className="text-sm break-all">
                       {component.paths.join(", ")} · Level {component.depth}
@@ -488,7 +503,8 @@ function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
                         aria-expanded={expanded.has(component.id)}
                         onClick={() => toggle(component.id)}
                       >
-                        {expanded.has(component.id) ? "Collapse" : "Expand"} {component.name}
+                        {expanded.has(component.id) ? "Collapse" : "Expand"}{" "}
+                        {labels.get(component.id)}
                       </Button>
                     )}
                   </li>
@@ -549,9 +565,9 @@ function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
           key={JSON.stringify([detail.id, query])}
           id={id}
           component={detail.id}
-          name={detail.name}
+          name={labels.get(detail.id) ?? detail.name}
           projection={query}
-          names={names}
+          labels={labels}
           onSelect={(componentId) => {
             const child = componentIndex.get(componentId);
             if (child) reveal(child);

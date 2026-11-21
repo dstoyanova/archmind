@@ -7,6 +7,7 @@ import { useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { fetchFileGraph } from "./api";
 import { LoadContent } from "./detail-content";
+import { componentLabels } from "./labels";
 import type { ThemePreference } from "./theme";
 
 export function FileDrilldown({
@@ -50,9 +51,13 @@ export function FileDrilldown({
 
 function FileNetwork({ graph, theme }: { graph: FileGraph; theme: ThemePreference }) {
   const { nodes, edges, labels } = useMemo(() => {
+    const componentNames = componentLabels(graph.components);
     const labels = new Map<string, string>([
       ...graph.files.map((file) => [`file:${file.id}`, file.path] as const),
-      ...graph.components.map((component) => [`component:${component.id}`, component.name] as const)
+      ...graph.components.map(
+        (component) =>
+          [`component:${component.id}`, componentNames.get(component.id) ?? component.name] as const
+      )
     ]);
     const columns = Math.max(1, Math.ceil(Math.sqrt(labels.size)));
     const nodes: Node[] = Array.from(labels, ([id, label], index) => ({

@@ -244,6 +244,74 @@ describe("projectGraph", () => {
     ]);
   });
 
+  it("omits components without files in the selected roles unless a dependency ends at them", () => {
+    const snapshot = createSnapshot();
+    snapshot.components.push({
+      id: "d",
+      name: "d",
+      parentId: "pkg",
+      depth: 2,
+      kind: "folder",
+      paths: ["packages/pkg/src/d"],
+      metrics: { fileCount: 1, loc: 10, fanIn: 0, fanOut: 0, instability: 0 }
+    });
+    snapshot.files.push({
+      id: "f-d",
+      path: "packages/pkg/src/d/d.test.ts",
+      componentId: "d",
+      role: "test",
+      language: "ts",
+      loc: 10,
+      parseStatus: "parsed"
+    });
+    const projector = createSnapshotProjector(snapshot);
+    const componentIds = (filters: object) =>
+      projector
+        .projectGraph({ depth: 1, expanded: ["pkg"], filters })
+        .components.map(({ id }) => id);
+
+    expect(componentIds({ includeFileRoles: ["source"] })).toEqual([
+      "root",
+      "pkg",
+      "a",
+      "b",
+      "c",
+      "d"
+    ]);
+    // b has only test files but is the target of a source import; d is unreferenced.
+    expect(componentIds({ includeFileRoles: ["source"], includeEmptyComponents: false })).toEqual([
+      "root",
+      "pkg",
+      "a",
+      "b",
+      "c"
+    ]);
+    expect(componentIds({ includeFileRoles: ["test"], includeEmptyComponents: false })).toEqual([
+      "root",
+      "pkg",
+      "b",
+      "c",
+      "d"
+    ]);
+    expect(componentIds({ includeEmptyComponents: false })).toEqual([
+      "root",
+      "pkg",
+      "a",
+      "b",
+      "c",
+      "d"
+    ]);
+    // No file has a story role, so nothing remains.
+    expect(
+      projector
+        .projectGraph({
+          depth: 1,
+          filters: { includeFileRoles: ["story"], includeEmptyComponents: false }
+        })
+        .components.map(({ id }) => id)
+    ).toEqual([]);
+  });
+
   it("finds cycles after expansion and removes them under either role or type-only filters", () => {
     const snapshot = createSnapshot();
     snapshot.fileImports.push({
