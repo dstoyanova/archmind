@@ -1,7 +1,7 @@
 # ArchMind — MVP Implementation Plan
 
-**Status:** Draft (revision 2; see [§11 Revision history](#11-revision-history))
-**Last updated:** 2026-11-15
+**Status:** Draft (revision 4; see [§11 Revision history](#11-revision-history))
+**Last updated:** 2026-11-21
 
 This plan turns the [product overview](../PRODUCT.md) and [technical architecture](../ARCHITECTURE.md) into concrete requirements, a target architecture and an incremental delivery sequence.
 
@@ -96,15 +96,15 @@ The **M** column gives the milestone in which each requirement is delivered.
 
 #### Governance (FR-G)
 
-| ID    | Requirement                                                                                                                                                                                                                | M      |
-| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| FR-G1 | Declare rules in the `rules` section of `archmind.config.json`: layer ordering, forbidden dependencies, no cycles, metric thresholds and restricted external packages. Rules can target components at any hierarchy level. | M3     |
-| FR-G2 | Run built-in default rules when no rules are configured: no cycles between components, and high-coupling warnings.                                                                                                         | M3     |
-| FR-G3 | Evaluating rules against a snapshot creates an immutable **rule evaluation**. Each of its findings records the rule ID and version, severity, message, evidence, and a fingerprint that stays stable across snapshots.     | M3     |
-| FR-G4 | By default, rules apply to the production graph. Each rule can opt in to test files or type-only imports.                                                                                                                  | M3     |
-| FR-G5 | Compare an evaluation with a baseline evaluation to mark findings as new, existing or resolved. Locally the baseline is explicit (M3); in the service it is selected automatically (§4.9, M4).                             | M3, M4 |
-| FR-G6 | Show findings in a list and highlight them on the graph. Show a health summary per snapshot.                                                                                                                               | M3     |
-| FR-G7 | `archmind check` evaluates rules locally. It exits non-zero when violations exceed a severity threshold, optionally counting only violations that are new against a baseline.                                              | M3     |
+| ID    | Requirement                                                                                                                                                                                                                                                                                                                 | M      |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| FR-G1 | Declare rules in the `rules` section of `archmind.config.json`: layer ordering, forbidden dependencies, no cycles, metric thresholds and restricted external packages. Each rule has a unique ID. Rules can target components at any hierarchy level, selected by path or configured component name, never by display name. | M3     |
+| FR-G2 | Built-in default rules run unless the config disables them: no cycles between components, and high-coupling warnings. Default thresholds are calibrated on real repositories (§4.9).                                                                                                                                        | M3     |
+| FR-G3 | Evaluating rules against a snapshot creates an immutable, deterministic **rule evaluation**. Each of its findings records the rule ID and version, severity, message, evidence, and a fingerprint that stays stable across snapshots.                                                                                       | M3     |
+| FR-G4 | By default, rules apply to the production graph: `source` files, with type-only imports included and marked (§4.7). Cycle rules ignore `typeOnly` cycles by default. Each dependency or cycle rule can opt in to other file roles and opt out of type-only imports.                                                         | M3     |
+| FR-G5 | Compare an evaluation with a baseline evaluation to mark findings as new, existing or resolved. Locally the baseline is explicit (M3); in the service it is selected automatically (§4.9, M4).                                                                                                                              | M3, M4 |
+| FR-G6 | Show findings in a list and highlight them on the graph, including on collapsed ancestors. Show a health summary per evaluation, with the analysis coverage it depends on (§4.9).                                                                                                                                           | M3     |
+| FR-G7 | `archmind check` evaluates rules for a repository path or an existing snapshot. It exits non-zero when violations reach a severity threshold, optionally counting only violations that are new against a baseline. Tool and configuration errors use a different exit code from violations.                                 | M3     |
 
 #### Repositories and analysis runs (FR-R)
 
@@ -342,12 +342,34 @@ PostgreSQL via Prisma, introduced in M4. Every tenant-owned table is reachable f
 
 ### 4.9 Rule evaluations and baselines
 
-- **Evaluation.** `evaluate(snapshot, rules, governanceEngineVersion)` produces an immutable `RuleEvaluation` with its findings.
-  - The CLI writes it as `<snapshot>.evaluation.json`. The service stores it relationally.
+- **Rule model (ADR-0006).** The `rules` section of `archmind.config.json` is validated by a zod schema in `contracts`. `governance-engine` owns its semantics.
+  - Every rule has a unique, user-chosen `id`, a `type` and a `severity` (`error` or `warning`). Fingerprints include the `id`, so renaming a rule resolves its old findings and creates new ones.
+  - Rule types: `layers` (ordered layers, each allowed to depend only on the layers below it), `forbidden-dependency` (`from` must not depend on `to`), `no-cycles`, `threshold` (a stored component metric with a maximum) and `restricted-package` (external packages that only listed components may import).
+  - **Selectors** match components by repository-relative path, with globs such as `apps/api/src/modules/*`, or by configured component name. They never match display names, because those repeat (M2.7 found two `pre` components in Changesets and four `node` components in Vitest). A selector matches the component and its subtree. A selector that matches no component produces a rule diagnostic in the evaluation, so a typo is never a silent pass.
+  - **Graph scope (FR-G4).** Dependency and cycle rules use the production graph by default, and can opt in to other roles or opt out of type-only imports. Threshold rules use the stored production-graph metrics (§4.4) and have no scope options, because metrics are not recomputed for other filters.
+  - **Validation boundary.** The config root rejects unknown keys, so a misspelt `rules` key is an error rather than silently disabling governance. Analysis validates the root and the `analysis` section only. An invalid `rules` section fails `archmind check` and the evaluation step, never the analysis, because rules never affect a snapshot (M4: "a rule failure never affects the snapshot").
+- **Default rules.** Built-in rules with reserved IDs run unless the config disables them by ID: no cycles between components (non-`typeOnly` cycles from the snapshot) and high coupling (warning). Configuring other rules does not turn the defaults off. Default thresholds are calibrated on the M2.7 repositories (ArchMind, Vitest, Changesets) before M3 ends, so that real repositories get a reviewable number of findings.
+- **Evaluation.** `evaluate(snapshot, rules, governanceEngineVersion)` in `governance-engine` produces an immutable `RuleEvaluation` with its findings and rule diagnostics.
+  - It indexes the snapshot once with the shared `createSnapshotProjector` (§4.4) and does not reimplement projection or cycle detection.
+  - It is deterministic: the same snapshot content, rules and engine version give identical findings in identical order. Only `createdAt` is metadata.
+  - `rulesHash` is the hash of the canonical JSON of the parsed and normalised `rules` section, so reformatting the config does not change it.
+  - The evaluation document records `schemaVersion`, `governanceEngineVersion`, `rulesHash`, and the snapshot's `contentHash` and `analysisConfigHash`. It refers to the snapshot by `contentHash`, not by file name or snapshot ID, because snapshot IDs are opaque and supplied by the reader (§4.11). The local evaluation key is therefore `contentHash + rulesHash + governanceEngineVersion`.
+  - The CLI writes it as `<snapshot>.evaluation.json` next to the snapshot by default. The service stores it relationally.
   - Rules come from `archmind.config.json` in the analysed source. For GitHub repositories, rule changes therefore arrive with new commits.
-  - A governance engine upgrade re-evaluates existing snapshots without re-analysis. Locally, editing only the rules reuses the snapshot, because the rules are not part of `sourceHash`.
-- **Fingerprints** hash the rule ID with the subject's component paths and dependency endpoints, not line numbers. Unrelated edits therefore do not change them.
-- **Status is derived, not stored.** `compareEvaluations(base, head)` in `domain` classifies findings by fingerprint as new, existing or resolved. Computing this on read means analyses arriving out of order never require rewriting immutable records. When the two evaluations have different `rulesHash` values, the comparison is flagged `rulesChanged`.
+  - A governance engine upgrade re-evaluates existing snapshots without re-analysis. Locally, editing only the rules reuses the snapshot, because the rules are not part of `sourceHash`, `analysisConfigHash` or `contentHash`. `archmind check --snapshot` evaluates an existing snapshot and warns when the current config's analysis section no longer matches its `analysisConfigHash`.
+- **Findings** record the rule ID and version, severity, message, subject (components, dependency endpoints or external package), evidence and fingerprint.
+  - Messages name components by path, as the explorer does for repeated names (M2 review E4).
+  - Evidence uses the explorer's compact evidence shape `{ filePath, line, column, specifier, kind, role }`, sorted. It is capped per finding, with the total count recorded, so a forbidden dependency between two large packages stays bounded. ADR-0006 sets the cap.
+  - **Coverage limit.** An import recorded as `WORKSPACE_ENTRY_UNMAPPED` targets the package component, not a file, so rules on folders inside that package cannot see it. Unresolved and excluded imports are not edges at all. This is why the health summary reports coverage next to findings.
+- **Fingerprints** hash the rule ID with the subject's stable component keys (the kind and path, or configured name, that component IDs are derived from) and dependency endpoints, never line numbers. Unrelated edits therefore do not change them. Hierarchy settings (`componentRoots`, `nestedFolders`, `components`) change component keys: in M2.7, one `componentRoots` change replaced 138 of Vitest's 295 stored dependencies.
+- **Status is derived, not stored.** `compareEvaluations(base, head)` in `domain` classifies findings by fingerprint as new, existing or resolved. Computing this on read means analyses arriving out of order never require rewriting immutable records. The comparison is flagged `rulesChanged` when the `rulesHash` values differ, and `hierarchyChanged` when the snapshots' `analysisConfigHash` values differ, so users can tell config-driven churn from code changes.
+- **Health summary.** Per evaluation: finding counts by severity and by rule, the components with the most findings, new and resolved counts when a baseline is given, and the snapshot's analysis coverage (unresolved rate and diagnostic totals by code, such as `WORKSPACE_ENTRY_UNMAPPED`). There is no composite health score in the MVP, because a single number cannot cite its evidence.
+- **Open questions for ADR-0006.**
+  - The selector syntax, and whether a layer may depend on every lower layer or only the next one.
+  - How a cycle that appears at several depths, or one that `nestedFolders` exposes, is reported once rather than at each level.
+  - The high-coupling measure and its default threshold.
+  - The evidence cap per finding.
+  - What "rule version" means for user-defined rules, given that fingerprints exclude it.
 - **Baseline selection (M4):**
   - **Tracked-branch snapshots:** the evaluation of the tracked-branch snapshot with the latest `commitTimestamp` earlier than this one. Ties are broken by analysis order. An evaluation with the same `rulesHash` is preferred.
   - **Other branches and local snapshots with uncommitted changes:** the latest tracked-branch evaluation.
@@ -390,7 +412,7 @@ All tenant data is served under `/api/workspaces/:workspaceId/...` from M2 onwar
 | M   | Endpoints (relative to the workspace unless they start with `/auth` or `/github`)                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | M2  | `GET /snapshots`, `GET /snapshots/:id` (overview), `GET /snapshots/:id/diagnostics?cursor=`, `GET /snapshots/:id/graph?depth=&expand=&roles=&includeTypeOnly=&includeEmptyComponents=&level=component\|file&componentId=`, `GET /snapshots/:id/components/:componentId`, `GET /snapshots/:id/components/:componentId/files?cursor=`, `GET /snapshots/:id/dependencies?from=&to=&roles=&includeTypeOnly=&includeEmptyComponents=&cursor=` (evidence for a projected edge, addressed by its endpoints) |
-| M3  | `GET /snapshots/:id/evaluations`, `GET /evaluations/:id`, `GET /evaluations/:id/findings?severity=&ruleId=&baseline=&status=&cursor=`, `GET /findings/:id`, `GET /evaluations/:id/health`                                                                                                                                                                                                                                                                                                            |
+| M3  | `GET /snapshots/:id/evaluations`, `GET /evaluations/:id`, `GET /evaluations/:id/findings?severity=&ruleId=&baseline=&status=&cursor=`, `GET /evaluations/:id/findings/:findingId` (with paginated evidence), `GET /evaluations/:id/health?baseline=`                                                                                                                                                                                                                                                 |
 | M4  | `GET/POST /repositories`, `GET /repositories/:id`, `POST /repositories/:id/analyses` (returns `202 { runId }`), `GET /analysis-runs/:id`, `GET /repositories/:id/snapshots` (paginated), `POST /snapshots/:id/evaluations` (re-evaluate)                                                                                                                                                                                                                                                             |
 | M5  | `GET /auth/github/login`, `GET /auth/github/callback`, `POST /auth/logout`, `GET /me`, `GET/POST /workspaces`, `GET /members`, `PATCH/DELETE /members/:userId`, `GET/POST /invitations`, `DELETE /invitations/:id`, `POST /invitations/accept` (token in body), `POST /github/webhooks`, `GET/POST /github/installations`, `GET /github/installations/:id/repositories`, `DELETE /repositories/:id`                                                                                                  |
 | M6  | `GET/PUT /settings/ai`, `GET/POST /conversations`, `GET /conversations/:id`, `POST /conversations/:id/messages` (SSE progress, then the validated answer), `GET /agent-runs/:id`                                                                                                                                                                                                                                                                                                                     |
@@ -405,6 +427,7 @@ Conventions:
 - Component graph requests default to depth 1 and the production graph (`roles=source`, type-only imports included). Use repeated `expand` and `roles` query parameters for lists. Component detail and dependency evidence accept the same projection options as the graph, so their edges match the visible graph. Evidence uses `from` and `to` component IDs plus the projection options and pagination.
 - Component graph responses carry counts, not evidence. External package counts are broken down by role only; snapshot external totals do not track import kinds. File graph requests require `level=file` and `componentId`.
 - Snapshot IDs are opaque and supplied by the reader, independent of `contentHash`. List entries include a reader-supplied display label and, for readable snapshots, existing source metadata and creation time. No `source.repositoryName` is added to the snapshot format.
+- Evaluation IDs are opaque in the same way. Locally, the reader links `*.evaluation.json` files to every snapshot with the same `contentHash`, and validates them on load like snapshots: schema, supported versions, size limit and `O_NOFOLLOW`. Finding IDs are unique within their evaluation; the fingerprint is the identity across evaluations. `baseline` takes an evaluation ID, and `status=resolved` returns findings from the baseline that are missing from the evaluation.
 
 ### 4.12 AI assistant
 
@@ -523,17 +546,22 @@ Detailed tasks and acceptance criteria are in the [backlog](../BACKLOG.md). Each
 
 - **Goal:** answer "what should I be concerned about?" before any platform investment.
 - **Scope:**
-  - Rule model and config validation.
-  - Governance engine with default rules.
-  - Evaluation documents and baseline comparison.
-  - `archmind check`.
-  - Findings and health in the local explorer, with graph highlighting.
+  - Rule model, a strict config root and config validation.
+  - Governance engine with default rules, built on the shared `domain` projector.
+  - Evaluation documents linked to snapshots by `contentHash`, and baseline comparison.
+  - `archmind check`, for a repository path or an existing snapshot.
+  - Findings API with a file-based evaluation reader, in its own `apps/api` module.
+  - Findings, health summary with analysis coverage, and graph highlighting in the local explorer.
+  - Rules for ArchMind's own package boundaries (§4.2), checked in CI.
+  - Calibration of the default rules on the M2.7 repositories, recorded in `docs/development/`.
 - **Exit criteria:**
-  - Cycles, layer violations and threshold breaches appear as findings with file-level evidence.
+  - Cycles, layer violations, forbidden dependencies, restricted packages and threshold breaches appear as findings with file-level evidence.
   - Tests and type-only cycles do not produce default findings.
-  - `archmind check` fails on a fixture with violations, and with `--baseline` reports only new ones.
-  - Editing only rules reuses the snapshot.
-  - ArchMind's own CI runs `archmind check` and passes.
+  - `archmind check` fails on a fixture with violations, and with `--baseline` reports only new ones. Tool and configuration errors use a separate exit code.
+  - Editing only rules leaves the snapshot hashes unchanged and re-evaluates an existing snapshot.
+  - ArchMind's own CI runs `archmind check` with rules for its package boundaries, and passes.
+  - Default rules on Vitest and Changesets produce findings that a reviewer has checked and recorded.
+  - Running `pnpm dev` with `ARCHMIND_SNAPSHOT_DIR` containing evaluations shows findings, the health summary and highlighting.
 - **ADRs:** 0006.
 
 ### M4 — Persistent analysis service
@@ -618,15 +646,15 @@ Detailed tasks and acceptance criteria are in the [backlog](../BACKLOG.md). Each
 
 ## 6. Testing strategy per milestone
 
-| M   | Unit                                                                                                               | Integration                                                                                                                         | E2E                                                                                   |
-| --- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| M1  | Extraction and import kinds, roles, resolution strategies, hierarchy mapping, projection, metrics, Tarjan, hashing | CLI against fixture repositories with expected graphs. Reproducibility across directories. Resolution benchmark (manual, dev-only). | —                                                                                     |
-| M2  | Graph view-model mapping, projection filters, cycles on projected graphs, file-level projection                    | API against fixture snapshots, including invalid, tampered and oversized files                                                      | Smoke test: open the explorer, expand a component, view evidence, drill down to files |
-| M3  | Every rule type, fingerprint stability, evaluation comparison, config validation errors                            | `archmind check` against violation fixtures, with and without a baseline                                                            | View a finding and jump to the graph                                                  |
-| M4  | Run state machine, idempotency keys, baseline selection                                                            | Prisma repositories, worker pipeline, child-process timeout and memory kill, reaper (test Postgres in Docker)                       | Add repository, analyse, view findings and history                                    |
-| M5  | Guard, session and invitation logic                                                                                | Cross-tenant access matrix, repository access checks, webhook signatures, malicious archive fixtures                                | Sign-in and invitation acceptance (GitHub mocked)                                     |
-| M6  | Citation validation, context binding, data-policy enforcement (fake model)                                         | Agent with fake model and real query services                                                                                       | Enable AI, ask a question, click a citation                                           |
-| M7  | Snapshot diff                                                                                                      | Push webhook to analysis                                                                                                            | All core journeys (see the backlog)                                                   |
+| M   | Unit                                                                                                                                                                                                        | Integration                                                                                                                                                                                         | E2E                                                                                              |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| M1  | Extraction and import kinds, roles, resolution strategies, hierarchy mapping, projection, metrics, Tarjan, hashing                                                                                          | CLI against fixture repositories with expected graphs. Reproducibility across directories. Resolution benchmark (manual, dev-only).                                                                 | —                                                                                                |
+| M2  | Graph view-model mapping, projection filters, cycles on projected graphs, file-level projection                                                                                                             | API against fixture snapshots, including invalid, tampered and oversized files                                                                                                                      | Smoke test: open the explorer, expand a component, view evidence, drill down to files            |
+| M3  | Every rule type, selectors (including unmatched selectors), fingerprint stability across unrelated edits, determinism, evaluation comparison (`rulesChanged`, `hierarchyChanged`), config validation errors | `archmind check` against violation fixtures, with and without a baseline, and on an existing snapshot. API against generated evaluation fixtures, including invalid, mismatched and oversized files | View a finding, jump to the graph and the evidence, including a finding on a collapsed component |
+| M4  | Run state machine, idempotency keys, baseline selection                                                                                                                                                     | Prisma repositories, worker pipeline, child-process timeout and memory kill, reaper (test Postgres in Docker)                                                                                       | Add repository, analyse, view findings and history                                               |
+| M5  | Guard, session and invitation logic                                                                                                                                                                         | Cross-tenant access matrix, repository access checks, webhook signatures, malicious archive fixtures                                                                                                | Sign-in and invitation acceptance (GitHub mocked)                                                |
+| M6  | Citation validation, context binding, data-policy enforcement (fake model)                                                                                                                                  | Agent with fake model and real query services                                                                                                                                                       | Enable AI, ask a question, click a citation                                                      |
+| M7  | Snapshot diff                                                                                                                                                                                               | Push webhook to analysis                                                                                                                                                                            | All core journeys (see the backlog)                                                              |
 
 The [testing instructions](../../.github/instructions/testing.instructions.md) apply throughout:
 
@@ -637,16 +665,16 @@ The [testing instructions](../../.github/instructions/testing.instructions.md) a
 
 ## 7. Risks and mitigations
 
-| Risk                                                                                                                  | Mitigation                                                                                                                                             |
-| --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Install-free resolution is wrong for real-world setups (`exports` maps, `dist` entry points, missing `extends` bases) | Use the explicit strategy in §4.6. Measure resolution rate and reference-tool agreement in M1. Fall back to component-level edges rather than failing. |
-| The inferred hierarchy is not meaningful to users                                                                     | Validate on real repositories in M2. Use `componentRoots`, `nestedFolders` and configured components. Generate a starter config in M7.                 |
-| False findings from tests and type-only imports erode trust                                                           | Use the production graph by default. Flag `typeOnly` cycles. Let rules opt in explicitly.                                                              |
-| Large repositories are slow or use too much memory                                                                    | Parse without type-checking, enforce limits, use an isolated process with a memory cap, and measure from M1.                                           |
-| Storage growth from frequent analyses                                                                                 | Keep only the relational core, store details as deduplicated compressed documents, and add retention policies in M7.                                   |
-| Graph becomes unreadable at scale                                                                                     | Show the hierarchy collapsed by default, filter, and collapse external dependencies.                                                                   |
-| Malicious repository content (archive tricks, prompt injection)                                                       | Apply NFR-5 and NFR-6, the isolated process, read-only AI tools and validated citations, and run the security review in M5.                            |
-| Solo developer scope creep                                                                                            | Keep strict milestone exit criteria. Anything not needed for the current demo goes to the backlog.                                                     |
+| Risk                                                                                                                  | Mitigation                                                                                                                                                                                 |
+| --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Install-free resolution is wrong for real-world setups (`exports` maps, `dist` entry points, missing `extends` bases) | Use the explicit strategy in §4.6. Measure resolution rate and reference-tool agreement in M1. Fall back to component-level edges rather than failing.                                     |
+| The inferred hierarchy is not meaningful to users                                                                     | Validate on real repositories in M2. Use `componentRoots`, `nestedFolders` and configured components. Generate a starter config in M7.                                                     |
+| False findings from tests and type-only imports erode trust                                                           | Use the production graph by default. Flag `typeOnly` cycles. Let rules opt in explicitly. Calibrate default rules on real repositories in M3, and show analysis coverage next to findings. |
+| Large repositories are slow or use too much memory                                                                    | Parse without type-checking, enforce limits, use an isolated process with a memory cap, and measure from M1.                                                                               |
+| Storage growth from frequent analyses                                                                                 | Keep only the relational core, store details as deduplicated compressed documents, and add retention policies in M7.                                                                       |
+| Graph becomes unreadable at scale                                                                                     | Show the hierarchy collapsed by default, filter, and collapse external dependencies.                                                                                                       |
+| Malicious repository content (archive tricks, prompt injection)                                                       | Apply NFR-5 and NFR-6, the isolated process, read-only AI tools and validated citations, and run the security review in M5.                                                                |
+| Solo developer scope creep                                                                                            | Keep strict milestone exit criteria. Anything not needed for the current demo goes to the backlog.                                                                                         |
 
 ## 8. After beta
 
@@ -698,6 +726,14 @@ Small libraries are confirmed in the task that introduces them:
 
 ## 11. Revision history
 
+- **Revision 4 (2026-11-21):** M3 refined after the M2 implementation and review.
+  - **Rules:** rules have IDs. Selectors use paths or configured names, because display names repeat. Default rules stay on unless disabled by ID, and are calibrated on the M2.7 repositories (new task M3.6). FR-G4 now matches the production graph from M2: type-only imports count unless a rule opts out, and cycle rules ignore `typeOnly` cycles.
+  - **Config:** the config root becomes strict, and an invalid `rules` section never fails analysis.
+  - **Evaluations:** evaluations are deterministic and refer to snapshots by `contentHash`, because snapshot IDs are opaque. Evidence reuses the explorer's compact shape with a per-finding cap.
+  - **Comparison and health:** comparisons also flag `hierarchyChanged`. The health summary reports analysis coverage and no composite score.
+  - **API and CLI:** finding detail moves under its evaluation. `archmind check` evaluates paths or existing snapshots, with separate exit codes for errors.
+  - **Explorer:** highlighting maps findings to collapsed ancestors.
+  - ADR-0006 lists the questions it must answer.
 - **Revision 3 (2026-11-17):** M2 refined after the M1 implementation and review. Explorer graph functions move to `domain` first. Projected edges are addressed by their endpoints, and evidence is paginated. The default view is the production graph. Snapshot files are validated on load. ArchMind's self-analysis config and `analysis.exclude` move from M3 to M2, and hierarchy validation becomes an explicit task. The NestJS and OpenAPI libraries and the app build setup need approval.
 - **Revision 2 (2026-11-15):** changes made in response to a review of revision 1.
   - **Snapshots:** `contentHash` is now reproducible across checkouts. Components are hierarchical. Module resolution has an explicit install-free strategy with a measurable bar. File roles and import kinds are classified.

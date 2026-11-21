@@ -217,56 +217,98 @@ Items from the [M2 code review](./code-reviews/m2-code-review.md), which has the
 
 ## M3 — Local governance
 
+M3 builds on M2's shared outputs. The `domain` projector and cycle detection come from M2.1, and the compact evidence shape from M2.2. M2.3 provides the reader pattern (opaque IDs, validated on load) and fixtures generated from the CLI. M2.6 provides `analysis.exclude`, which keeps violation fixtures out of self-analysis, and the M2.7 repositories serve for calibration. All M2 review items (E1 to E6) are closed, so none carry over. Design details are in §4.9 of the plan.
+
 ### M3.1 Define the governance rule model ⚠ Approval (ADR-0006)
 
-Add the `rules` section of `archmind.config.json`: layers, forbidden dependencies, no cycles, thresholds and restricted packages. Rules can target any hierarchy level and opt in to tests or type-only imports (FR-G1, FR-G4).
+Add the `rules` section of `archmind.config.json`: layers, forbidden dependencies, no cycles, thresholds and restricted packages. Rules can target any hierarchy level, and dependency and cycle rules can change their graph scope (FR-G1, FR-G4).
 
-- **Depends on:** M1.8
+> **Before starting:** write ADR-0006 and get it approved. It defines rule evaluations as separate, immutable records and answers the open questions in §4.9: selector syntax and layer semantics, reporting a cycle that appears at several depths once, the high-coupling measure, the evidence cap, and what the rule version means for user-defined rules.
+
+- **Depends on:** M2.6
 - **Acceptance criteria:**
-  - [ ] Validated with zod, with actionable error messages.
-  - [ ] `rulesHash` covers only the `rules` section.
-  - [ ] ADR-0006 defines rule evaluations as separate, immutable records.
+  - [ ] Each rule has a unique `id`, a `type` and a `severity`. Dependency and cycle rules can opt in to file roles other than `source` and opt out of type-only imports. Threshold rules have no scope options.
+  - [ ] Selectors match component paths (with globs) or configured component names, never display names.
+  - [ ] Default rules can be disabled by their reserved ID. Configuring other rules does not disable them.
+  - [ ] The rules are validated with zod in `contracts`. Error messages name the rule `id` and the field.
+  - [ ] The config root rejects unknown keys, so a misspelt `rules` key is an error.
+  - [ ] `archmind analyze` validates the root and `analysis` only, and still succeeds with an invalid `rules` section.
+  - [ ] `rulesHash` covers only the normalised `rules` section. Tests show that adding or editing rules leaves `sourceHash`, `analysisConfigHash` and `contentHash` unchanged, and that reformatting the rules leaves `rulesHash` unchanged.
+  - [ ] The evaluation document schema is in `contracts`. It records `schemaVersion`, `governanceEngineVersion`, `rulesHash`, the snapshot's `contentHash` and `analysisConfigHash`, findings and rule diagnostics.
 
 ### M3.2 Implement the governance engine
 
-Create `packages/governance-engine`: a pure `evaluate(snapshot, rules, version)` that returns a `RuleEvaluation`, plus default rules (FR-G2, FR-G3).
+Create `packages/governance-engine`: a pure `evaluate(snapshot, rules, version)` that returns a `RuleEvaluation`, plus default rules (FR-G2, FR-G3). Add `compareEvaluations` to `domain`.
 
-- **Depends on:** M3.1
+- **Depends on:** M3.1, M2.1
 - **Acceptance criteria:**
-  - [ ] Each finding has a rule ID and version, severity, message, evidence and fingerprint.
-  - [ ] Fingerprints use component paths and dependency endpoints, never line numbers, and are tested to stay stable across unrelated edits.
+  - [ ] The engine depends only on `contracts` and `domain`. It uses `createSnapshotProjector` and the shared cycle functions, without its own projection or cycle detection.
+  - [ ] Each finding has a rule ID and version, severity, message, subject, evidence and fingerprint. Messages name components by path.
+  - [ ] Evidence uses the compact `{ filePath, line, column, specifier, kind, role }` shape, sorted, capped per finding (ADR-0006), with the total count recorded.
+  - [ ] Fingerprints use the rule ID, stable component keys and dependency endpoints, never line numbers. Tests show they stay stable across unrelated edits and across reordering the config.
+  - [ ] Evaluation is deterministic: the same snapshot content, rules and engine version give identical findings in identical order.
+  - [ ] A selector that matches no component produces a rule diagnostic and no silent pass.
   - [ ] Default rules ignore test files and `typeOnly` cycles.
-  - [ ] Unit tests cover every rule type.
+  - [ ] `compareEvaluations` classifies findings by fingerprint as new, existing or resolved. It flags `rulesChanged` when the `rulesHash` values differ and `hierarchyChanged` when the snapshots' `analysisConfigHash` values differ.
+  - [ ] Unit tests cover every rule type, selectors at depths 1 and 2 and below `nestedFolders`, and a forbidden dependency through a `WORKSPACE_ENTRY_UNMAPPED` import.
 
 ### M3.3 Add the `archmind check` CLI command
 
-Evaluate rules for a path or an existing snapshot. Write an evaluation document and compare it with an optional baseline (FR-G5, FR-G7).
+Evaluate rules for a repository path, or for an existing snapshot with `--snapshot`. Write an evaluation document and compare it with an optional baseline (FR-G5, FR-G7).
 
 - **Depends on:** M3.2, M1.9, M2.6
 - **Acceptance criteria:**
-  - [ ] `--fail-on <severity>` sets the exit code. `--baseline <evaluation.json> --new-only` counts only new findings.
-  - [ ] `compareEvaluations` (in `domain`) classifies findings as new, existing or resolved, and flags `rulesChanged`.
-  - [ ] Editing only rules reuses the existing snapshot.
-  - [ ] ArchMind's own CI runs `archmind check` and passes.
+  - [ ] `--fail-on <severity>` sets the exit code. `--baseline <evaluation.json> --new-only` counts only new findings. Violations and tool or config errors use different non-zero exit codes, and the codes are documented.
+  - [ ] The evaluation is written next to the snapshot as `<snapshot>.evaluation.json` by default. `--format summary` prints findings by severity and rule, the comparison, and analysis coverage.
+  - [ ] `--snapshot` verifies the snapshot's schema version and `contentHash` before evaluating. It warns when the current config's analysis section no longer matches the snapshot's `analysisConfigHash`.
+  - [ ] Editing only rules and running `--snapshot` re-evaluates without re-analysis.
+  - [ ] Violation fixtures live under `apps/cli/fixtures/`, which `analysis.exclude` already keeps out of self-analysis. They cover every rule type, a baseline with new and resolved findings, and test-only and type-only cycles that produce no default findings.
+  - [ ] ArchMind's `archmind.config.json` declares rules for its package boundaries (§4.2). These complement the ESLint import restrictions and do not replace them. CI runs `archmind check` on ArchMind and passes.
 
 ### M3.4 Serve findings from the explorer API
 
-Add a file-based `EvaluationReader` and the M3 endpoints: evaluations, findings with an optional baseline, finding detail and health summary.
+Add a `governance` module in `apps/api` with a file-based `EvaluationReader` and the M3 endpoints: evaluations, findings with an optional baseline, finding detail and the health summary (§4.11).
 
 - **Depends on:** M3.3, M2.3
 - **Acceptance criteria:**
-  - [ ] Findings are paginated and filterable.
-  - [ ] Status is computed on read when a baseline is given.
-  - [ ] Integration tests run against violation fixtures.
+  - [ ] Contracts and OpenAPI cover the evaluation, finding, evidence and health view models.
+  - [ ] `*.evaluation.json` files are linked to snapshots by `contentHash`, never by file name, and listed under every snapshot with that hash.
+  - [ ] Evaluation files are validated on load like snapshots. The checks cover schema, supported versions, size limit, `O_NOFOLLOW` and fingerprint caching. Invalid or unmatched files are reported with a reason and never crash the API.
+  - [ ] Evaluation IDs are opaque and map to files only through the directory listing.
+  - [ ] Findings are paginated and filterable. Finding detail paginates its evidence.
+  - [ ] Status is computed on read when a baseline evaluation ID is given. `status=resolved` returns baseline findings, and the response carries `rulesChanged` and `hierarchyChanged`.
+  - [ ] The health summary has no composite score. It contains counts by severity and rule, the components with the most findings, new and resolved counts with a baseline, and analysis coverage (unresolved rate and diagnostic totals by code).
+  - [ ] Integration tests run against evaluation fixtures generated by `archmind check` from the violation fixtures (not committed), plus invalid, mismatched and oversized files.
+  - [ ] Self-analysis shows `governance` as a second `apps/api` child component.
 
 ### M3.5 Build the findings UI
 
-Add a findings list and detail view, graph highlighting and a health summary (FR-G6).
+Add a findings list and detail view, graph highlighting and a health summary to the explorer (FR-G6).
+
+> **Before starting:** UI work uses shadcn/ui components. Custom components are allowed only where shadcn/ui has no equivalent, such as graph overlays.
 
 - **Depends on:** M3.4, M2.5
 - **Acceptance criteria:**
-  - [ ] You can jump from a finding to the affected components and to the evidence.
-  - [ ] Covered by a Playwright test.
+  - [ ] Users can select an evaluation, and optionally a baseline, for the current snapshot. The list filters by severity, rule and status.
+  - [ ] Findings on hidden components are highlighted on their nearest visible ancestor, with a count.
+  - [ ] Jumping from a finding expands the graph to its subject and applies the rule's role and type-only scope. It also shows components that are hidden because they have no files in the selected roles.
+  - [ ] You can jump from a finding to its evidence.
+  - [ ] Labels qualify repeated component names with their path, as in M2 (E4).
+  - [ ] The health summary shows analysis coverage next to the finding counts, and explains `WORKSPACE_ENTRY_UNMAPPED` as the snapshot overview does.
+  - [ ] Highlighting keeps the explorer within the M2 performance budgets in [explorer-performance.md](development/explorer-performance.md).
+  - [ ] The findings list is keyboard-navigable (NFR-14).
+  - [ ] Covered by a Playwright test, including a finding on a collapsed component.
+
+### M3.6 Validate default rules on real repositories
+
+Check that the default rules produce findings that people consider worth reviewing (§7, "False findings from tests and type-only imports erode trust").
+
+- **Depends on:** M3.3
+- **Acceptance criteria:**
+  - [ ] ArchMind, Vitest and Changesets are checked with the default rules, at the M2.7 revisions.
+  - [ ] The default high-coupling threshold is calibrated from these results and recorded in ADR-0006.
+  - [ ] The report, in `docs/development/`, traces a sample of findings to their evidence and labels each one as useful, noise or a coverage gap. Coverage gaps include findings missed because of `WORKSPACE_ENTRY_UNMAPPED`.
+  - [ ] The report includes reproduction steps, like the [M2.7 report](development/m2-hierarchy-validation.md).
 
 ## M4 — Persistent analysis service
 
