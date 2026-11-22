@@ -1,6 +1,5 @@
 import "reflect-metadata";
 
-// eslint-disable-next-line import/no-internal-modules -- Explicit server-only contracts export.
 import { createExplorerOpenApiDocument } from "@archmind/contracts/explorer-openapi";
 import { Module, type INestApplication } from "@nestjs/common";
 import { HttpAdapterHost, NestFactory } from "@nestjs/core";

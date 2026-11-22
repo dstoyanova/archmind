@@ -17,7 +17,7 @@ const internalPackages = [
 ];
 
 const publicSubpaths = {
-  "@archmind/contracts": ["@archmind/contracts/rules-hash"],
+  "@archmind/contracts": ["@archmind/contracts/explorer-openapi", "@archmind/contracts/rules-hash"],
   "@archmind/domain": ["@archmind/domain/repository-glob"]
 };
 
