@@ -5,5 +5,57 @@
     },
     "exclude": ["apps/cli/fixtures/**"]
   },
-  "rules": {}
+  "rules": {
+    "definitions": [
+      {
+        "id": "packages-cannot-import-apps",
+        "type": "forbidden-dependency",
+        "severity": "error",
+        "from": [{ "path": "packages/*" }],
+        "to": [{ "path": "apps/*" }]
+      },
+      {
+        "id": "web-only-imports-contracts",
+        "type": "forbidden-dependency",
+        "severity": "error",
+        "from": [{ "path": "apps/web" }],
+        "to": [{ "path": "packages/!(contracts)" }, { "path": "apps/!(web)" }]
+      },
+      {
+        "id": "domain-no-workspace-dependencies",
+        "type": "forbidden-dependency",
+        "severity": "error",
+        "from": [{ "path": "packages/domain" }],
+        "to": [{ "path": "packages/!(domain)" }]
+      },
+      {
+        "id": "contracts-only-imports-domain",
+        "type": "forbidden-dependency",
+        "severity": "error",
+        "from": [{ "path": "packages/contracts" }],
+        "to": [{ "path": "packages/!(contracts|domain)" }]
+      },
+      {
+        "id": "code-analysis-boundary",
+        "type": "forbidden-dependency",
+        "severity": "error",
+        "from": [{ "path": "packages/code-analysis" }],
+        "to": [{ "path": "packages/!(code-analysis|contracts|domain)" }]
+      },
+      {
+        "id": "architecture-engine-boundary",
+        "type": "forbidden-dependency",
+        "severity": "error",
+        "from": [{ "path": "packages/architecture-engine" }],
+        "to": [{ "path": "packages/!(architecture-engine|contracts|domain)" }]
+      },
+      {
+        "id": "governance-engine-boundary",
+        "type": "forbidden-dependency",
+        "severity": "error",
+        "from": [{ "path": "packages/governance-engine" }],
+        "to": [{ "path": "packages/!(governance-engine|contracts|domain)" }]
+      }
+    ]
+  }
 }

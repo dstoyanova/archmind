@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import type { AnalyzeOutputFormat } from "./analyze.js";
 import { runAnalyzeCommand } from "./analyze.js";
+import { CHECK_USAGE, runCheck } from "./check.js";
 import { runResolutionBenchmark, type ResolutionBenchmarkConfig } from "./resolution-benchmark.js";
 
 type WriteFn = (message: string) => void;
@@ -24,6 +25,10 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
 
   if (command === "resolution-benchmark") {
     return runBenchmark(rest, io);
+  }
+
+  if (command === "check") {
+    return runCheck(rest, io);
   }
 
   io.stderr(buildUsage());
@@ -117,6 +122,7 @@ function buildUsage(): string {
   return [
     "Usage:",
     "  archmind analyze <path> --out <snapshot.json> [--format snapshot|summary]",
+    CHECK_USAGE,
     "  archmind resolution-benchmark [--config <config.json>]"
   ].join("\n");
 }

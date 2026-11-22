@@ -258,12 +258,12 @@ Evaluate rules for a repository path, or for an existing snapshot with `--snapsh
 
 - **Depends on:** M3.2, M1.9, M2.6
 - **Acceptance criteria:**
-  - [ ] `--fail-on <severity>` sets the exit code. `--baseline <evaluation.json> --new-only` counts only new findings. Violations and tool or config errors use different non-zero exit codes, and the codes are documented.
-  - [ ] The evaluation is written next to the snapshot as `<snapshot>.evaluation.json` by default. `--format summary` prints findings by severity and rule, the comparison, and analysis coverage.
-  - [ ] `--snapshot` verifies the snapshot's schema version and `contentHash` before evaluating. It warns when the current config's analysis section no longer matches the snapshot's `analysisConfigHash`.
-  - [ ] Editing only rules and running `--snapshot` re-evaluates without re-analysis.
-  - [ ] Violation fixtures live under `apps/cli/fixtures/`, which `analysis.exclude` already keeps out of self-analysis. They cover every rule type, a baseline with new and resolved findings, and test-only and type-only cycles that produce no default findings.
-  - [ ] ArchMind's `archmind.config.json` declares rules for its package boundaries (§4.2). These complement the ESLint import restrictions and do not replace them. CI runs `archmind check` on ArchMind and passes.
+  - [x] `--fail-on <severity>` sets the exit code. `--baseline <evaluation.json> --new-only` counts only new findings. Violations and tool or config errors use different non-zero exit codes, and the codes are documented.
+  - [x] The evaluation is written next to the snapshot as `<snapshot>.evaluation.json` by default. `--format summary` prints findings by severity and rule, the comparison, and analysis coverage.
+  - [x] `--snapshot` verifies the snapshot's schema version and `contentHash` before evaluating. It warns when the current config's analysis section no longer matches the snapshot's `analysisConfigHash`.
+  - [x] Editing only rules and running `--snapshot` re-evaluates without re-analysis.
+  - [x] Violation fixtures live under `apps/cli/fixtures/`, which `analysis.exclude` already keeps out of self-analysis. They cover every rule type, a baseline with new and resolved findings, and test-only and type-only cycles that produce no default findings.
+  - [x] ArchMind's `archmind.config.json` declares rules for its package boundaries (§4.2). These complement the ESLint import restrictions and do not replace them. CI runs `archmind check` on ArchMind and passes.
 
 ### M3.4 Serve findings from the explorer API
 

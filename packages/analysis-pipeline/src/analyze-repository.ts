@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -20,12 +18,13 @@ import {
   type AnalysisConfig,
   type ArchitectureSnapshotDocument
 } from "@archmind/contracts";
-import { canonicalJson } from "@archmind/domain";
 
+import { computeAnalysisConfigHash, readArchmindConfig } from "./archmind-config.js";
 import { readGitSourceMetadata } from "./git-source-metadata.js";
 
 export interface AnalyzeRepositoryInput {
   repositoryRoot: string;
+  analysisConfig?: AnalysisConfig;
 }
 
 export interface AnalyzeRepositoryResult {
@@ -42,7 +41,7 @@ export async function analyzeRepository(
   input: AnalyzeRepositoryInput
 ): Promise<AnalyzeRepositoryResult> {
   const repositoryRoot = path.resolve(input.repositoryRoot);
-  const { analysisConfig } = await loadArchmindConfig(repositoryRoot);
+  const analysisConfig = input.analysisConfig ?? (await loadAnalysisConfig(repositoryRoot));
   const sourceProviderResult = await new LocalFsSourceProvider().discover({
     repositoryRoot,
     analysisConfig
@@ -75,7 +74,7 @@ export async function analyzeRepository(
   const snapshot = buildArchitectureSnapshot({
     engineVersion: ENGINE_VERSION,
     parserVersion: PARSER_VERSION,
-    analysisConfigHash: sha256Hex(canonicalJson(analysisConfig)),
+    analysisConfigHash: computeAnalysisConfigHash(analysisConfig),
     source: {
       kind: "local",
       sourceHash: sourceProviderResult.sourceHash,
@@ -120,29 +119,8 @@ export async function analyzeRepository(
   return { snapshot, warnings: git.warnings };
 }
 
-async function loadArchmindConfig(
-  repositoryRoot: string
-): Promise<{ analysisConfig: AnalysisConfig }> {
-  const configPath = path.join(repositoryRoot, "archmind.config.json");
-  let configContent: string;
-  try {
-    configContent = await readFile(configPath, "utf8");
-  } catch (error) {
-    if (isNodeError(error) && error.code === "ENOENT") {
-      return { analysisConfig: archmindAnalysisConfigSchema.parse({}).analysis };
-    }
-
-    throw error;
-  }
-
-  let configJson: unknown;
-  try {
-    configJson = JSON.parse(configContent);
-  } catch (error) {
-    throw new Error(`Invalid JSON in "archmind.config.json": ${toErrorMessage(error)}`);
-  }
-
-  const parsed = archmindAnalysisConfigSchema.safeParse(configJson);
+async function loadAnalysisConfig(repositoryRoot: string): Promise<AnalysisConfig> {
+  const parsed = archmindAnalysisConfigSchema.safeParse(await readArchmindConfig(repositoryRoot));
   if (!parsed.success) {
     const issues = parsed.error.issues.map(
       (issue) => `- ${issue.path.length > 0 ? issue.path.join(".") : "(root)"}: ${issue.message}`
@@ -150,22 +128,5 @@ async function loadArchmindConfig(
     throw new Error(`Invalid "archmind.config.json":\n${issues.join("\n")}`);
   }
 
-  return { analysisConfig: parsed.data.analysis };
-}
-
-function sha256Hex(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
-}
-
-function isNodeError(error: unknown): error is { code: string } {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    typeof (error as { code: unknown }).code === "string"
-  );
-}
-
-function toErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return parsed.data.analysis;
 }

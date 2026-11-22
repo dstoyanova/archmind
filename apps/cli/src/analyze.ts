@@ -1,6 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import process from "node:process";
 
 import {
   analyzeRepository,
@@ -33,8 +33,7 @@ export async function runAnalyzeCommand(input: AnalyzeCommandInput): Promise<str
     input.onWarning?.(warning);
   }
 
-  await ensureDirectoryForFile(outputPath);
-  await writeFileAtomically(outputPath, JSON.stringify(result.snapshot, null, 2) + "\n");
+  await writeJsonAtomically(outputPath, result.snapshot);
 
   if (input.format === "summary") {
     return formatSnapshotSummary(result.snapshot);
@@ -72,11 +71,11 @@ export async function ensureDirectoryForFile(filePath: string): Promise<void> {
   await mkdir(targetDirectory, { recursive: true });
 }
 
-/** Readers never see a partially written snapshot: the content lands via a same-directory rename. */
-async function writeFileAtomically(filePath: string, content: string): Promise<void> {
-  const temporaryPath = `${filePath}.${process.pid}.tmp`;
+export async function writeJsonAtomically(filePath: string, value: unknown): Promise<void> {
+  await ensureDirectoryForFile(filePath);
+  const temporaryPath = `${filePath}.${randomUUID()}.tmp`;
   try {
-    await writeFile(temporaryPath, content, "utf8");
+    await writeFile(temporaryPath, JSON.stringify(value, null, 2) + "\n", { flag: "wx" });
     await rename(temporaryPath, filePath);
   } catch (error) {
     await rm(temporaryPath, { force: true });

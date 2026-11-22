@@ -1,4 +1,4 @@
-# ArchMind CLI (`archmind analyze`)
+# ArchMind CLI (`analyze` and `check`)
 
 This guide explains how to run the local analysis CLI introduced in M1.9.
 
@@ -58,3 +58,30 @@ pnpm archmind analyze /absolute/path/to/repo --out /absolute/path/to/snapshot.js
 ## Related benchmark command
 
 For resolution-quality and performance benchmark instructions, see [m1-resolution-benchmark.md](./m1-resolution-benchmark.md).
+
+## Check governance rules
+
+Analyze the repository and evaluate its rules:
+
+```bash
+pnpm archmind check . --format summary --fail-on error
+```
+
+Without `--snapshot`, `check` writes `archmind.snapshot.json` in the working directory. By default it writes the evaluation next to the snapshot by appending `.evaluation.json` to its full filename. `--out <evaluation.json>` overrides the evaluation path. `--format summary` prints counts by severity and rule, baseline comparison when requested, and snapshot analysis coverage. The default `--format evaluation` writes the document without a summary.
+
+To apply current rules to an existing snapshot without re-analyzing:
+
+```bash
+pnpm archmind check . --snapshot ./tmp/snapshot.json \
+  --baseline ./tmp/baseline.evaluation.json --new-only --format summary
+```
+
+The repository path selects the config; it defaults to the working directory when `--snapshot` is supplied. Snapshot reuse verifies the schema version and `contentHash`. Changes to `analysis` produce a warning; the check still uses the stored graph and metrics. Rules come from the current config. `--new-only` requires `--baseline` and filters the exit-code decision, not the evaluation JSON or summary totals.
+
+| Code | Meaning                                                                                                    |
+| ---- | ---------------------------------------------------------------------------------------------------------- |
+| `0`  | No findings at or above the selected severity.                                                             |
+| `1`  | A finding reaches `--fail-on error` (default) or `--fail-on warning` (counts warnings and errors).         |
+| `2`  | Tool or configuration error, including invalid snapshots, baselines, or rule selectors that match nothing. |
+
+The CLI writes the evaluation before reporting violations or rule diagnostics. Use a separate path for a baseline you want to keep.

@@ -53,3 +53,6 @@ jobs:
 
       - name: Analyze ArchMind with the CLI
         run: pnpm archmind analyze . --out "$RUNNER_TEMP/archmind-snapshot.json" --format summary
+
+      - name: Check ArchMind's package boundaries
+        run: pnpm archmind check . --snapshot "$RUNNER_TEMP/archmind-snapshot.json" --format summary --fail-on error

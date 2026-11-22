@@ -56,7 +56,7 @@ Node.js 22 or newer is required (see `.nvmrc`). `pnpm format` rewrites files wit
 
 ## CLI analysis
 
-See [docs/development/cli-analyze.md](./docs/development/cli-analyze.md) for full setup, command options and examples.
+See the [CLI guide](./docs/development/cli-analyze.md) for setup, analysis examples, and how to run `archmind check` with an optional baseline.
 
 ## Local explorer API
 

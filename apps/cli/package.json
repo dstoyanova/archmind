@@ -15,8 +15,10 @@
   },
   "dependencies": {
     "@archmind/analysis-pipeline": "workspace:*",
+    "@archmind/architecture-engine": "workspace:*",
     "@archmind/contracts": "workspace:*",
     "@archmind/domain": "workspace:*",
+    "@archmind/governance-engine": "workspace:*",
     "typescript": "^5.9.3"
   }
 }

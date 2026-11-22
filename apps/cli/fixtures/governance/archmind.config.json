@@ -1,0 +1,43 @@
+{
+  "rules": {
+    "definitions": [
+      {
+        "id": "layers",
+        "type": "layers",
+        "severity": "error",
+        "layers": [
+          { "name": "ui", "components": [{ "path": "src/ui" }] },
+          { "name": "data", "components": [{ "path": "src/{data,shared}" }] }
+        ]
+      },
+      {
+        "id": "forbid-data-to-ui",
+        "type": "forbidden-dependency",
+        "severity": "error",
+        "from": [{ "path": "src/data" }],
+        "to": [{ "path": "src/ui" }]
+      },
+      {
+        "id": "cycles",
+        "type": "no-cycles",
+        "severity": "warning",
+        "components": [{ "path": "src/{data,ui}" }]
+      },
+      {
+        "id": "max-ui-fan-out",
+        "type": "threshold",
+        "severity": "warning",
+        "components": [{ "path": "src/ui" }],
+        "metric": "fanOut",
+        "max": 0
+      },
+      {
+        "id": "restrict-storage",
+        "type": "restricted-package",
+        "severity": "warning",
+        "packages": ["fixture-storage"],
+        "allow": [{ "path": "src/data" }]
+      }
+    ]
+  }
+}

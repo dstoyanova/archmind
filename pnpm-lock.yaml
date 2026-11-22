@@ -93,12 +93,18 @@ importers:
       '@archmind/analysis-pipeline':
         specifier: workspace:*
         version: link:../../packages/analysis-pipeline
+      '@archmind/architecture-engine':
+        specifier: workspace:*
+        version: link:../../packages/architecture-engine
       '@archmind/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
       '@archmind/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@archmind/governance-engine':
+        specifier: workspace:*
+        version: link:../../packages/governance-engine
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
