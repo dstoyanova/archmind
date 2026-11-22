@@ -5,7 +5,7 @@ const baseVitestConfig = defineConfig({
     globals: true,
     environment: "node",
     include: ["**/*.{test,spec}.ts"],
-    exclude: ["**/node_modules/**", "**/dist/**", "**/build/**"]
+    exclude: ["**/node_modules/**", "**/dist/**", "**/build/**", "**/fixtures/**"]
   }
 });
 

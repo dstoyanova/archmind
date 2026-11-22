@@ -85,3 +85,5 @@ The repository path selects the config; it defaults to the working directory whe
 | `2`  | Tool or configuration error, including invalid snapshots, baselines, or rule selectors that match nothing. |
 
 The CLI writes the evaluation before reporting violations or rule diagnostics. Use a separate path for a baseline you want to keep.
+
+The CLI governance fixtures are analyzer inputs, not Vitest suites. Vitest skips `fixtures/` directories, so test-role inputs can keep their `.test.ts` filenames.
