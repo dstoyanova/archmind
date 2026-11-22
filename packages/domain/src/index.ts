@@ -1,4 +1,5 @@
 export * from "./canonical-json.js";
+export * from "./compare-evaluations.js";
 export * from "./graph-cycles.js";
 export * from "./hierarchy-projection.js";
 export * from "./invariants.js";

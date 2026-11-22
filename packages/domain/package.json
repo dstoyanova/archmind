@@ -4,11 +4,15 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./repository-glob": "./src/repository-glob.ts"
   },
   "scripts": {
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "test": "vitest run --config ../../vitest.config.ts"
+  },
+  "dependencies": {
+    "minimatch": "^10.1.1"
   }
 }

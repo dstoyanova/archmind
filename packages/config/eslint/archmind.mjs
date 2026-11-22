@@ -16,11 +16,17 @@ const internalPackages = [
   "@archmind/observability"
 ];
 
+const publicSubpaths = {
+  "@archmind/contracts": ["@archmind/contracts/rules-hash"],
+  "@archmind/domain": ["@archmind/domain/repository-glob"]
+};
+
 // `no-restricted-imports` from a later config block replaces an earlier one instead of merging,
 // so every block that sets the rule must repeat these patterns.
 const publicEntryPointPatterns = [
   {
-    group: ["@archmind/*/src/**", "@archmind/*/internal/**"],
+    regex: `^(?!(?:${Object.values(publicSubpaths).flat().join("|")})$)@archmind/[^/]+/`,
+    caseSensitive: true,
     message: "Import internal files only through package public entry points."
   }
 ];
@@ -34,10 +40,12 @@ function createInternalRestrictionRule(
   return [
     "error",
     {
-      paths: restrictedPackages.map((pkg) => ({
-        name: pkg,
-        message: `${messagePrefix}: ${pkg} is not allowed here.`
-      })),
+      paths: restrictedPackages.flatMap((pkg) =>
+        [pkg, ...(publicSubpaths[pkg] ?? [])].map((name) => ({
+          name,
+          message: `${messagePrefix}: ${pkg} is not allowed here.`
+        }))
+      ),
       patterns: publicEntryPointPatterns
     }
   ];
@@ -110,12 +118,6 @@ const archmindConfig = [
     rules: {
       ...tseslint.configs.recommended.rules,
       "import/no-unresolved": "off",
-      "import/no-internal-modules": [
-        "error",
-        {
-          forbid: ["@archmind/*/*"]
-        }
-      ],
       "no-restricted-imports": ["error", { patterns: publicEntryPointPatterns }]
     }
   },
@@ -191,8 +193,8 @@ const archmindConfig = [
     files: ["packages/governance-engine/**/*.{ts,tsx,mts,cts}"],
     rules: {
       "no-restricted-imports": createInternalRestrictionRule(
-        ["@archmind/contracts"],
-        "governance-engine may only depend on contracts"
+        ["@archmind/contracts", "@archmind/domain"],
+        "governance-engine may only depend on contracts and domain"
       )
     }
   },

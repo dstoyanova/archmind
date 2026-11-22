@@ -192,7 +192,7 @@ function collectVisible(snapshot: ArchitectureSnapshot, options: ProjectGraphOpt
 
 type ImportFilter = (fileImport: FileImport, fromFile: ArchitectureFile) => boolean;
 
-function createImportFilter(filters?: ProjectGraphFilters): ImportFilter {
+export function createImportFilter(filters?: ProjectGraphFilters): ImportFilter {
   const kinds = new Set(filters?.includeImportKinds);
   const roles = new Set(filters?.includeFileRoles);
 

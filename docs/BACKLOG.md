@@ -242,15 +242,15 @@ Create `packages/governance-engine`: a pure `evaluate(snapshot, rules, version)`
 
 - **Depends on:** M3.1, M2.1
 - **Acceptance criteria:**
-  - [ ] The engine depends only on `contracts` and `domain`. It uses `createSnapshotProjector` and the shared cycle functions, without its own projection or cycle detection.
-  - [ ] Each finding has a rule ID and version, severity, message, subject, evidence and fingerprint. Messages name components by path.
-  - [ ] Evidence uses the compact `{ filePath, line, column, specifier, kind, role }` shape, sorted, capped per finding (ADR-0006), with the total count recorded.
-  - [ ] Fingerprints use the rule ID, stable component keys and dependency endpoints, never line numbers. Tests show they stay stable across unrelated edits and across reordering the config.
-  - [ ] Evaluation is deterministic: the same snapshot content, rules and engine version give identical findings in identical order.
-  - [ ] A selector that matches no component produces a rule diagnostic and no silent pass.
-  - [ ] Default rules ignore test files and `typeOnly` cycles.
-  - [ ] `compareEvaluations` classifies findings by fingerprint as new, existing or resolved. It flags `rulesChanged` when the `rulesHash` values differ and `hierarchyChanged` when the snapshots' `analysisConfigHash` values differ.
-  - [ ] Unit tests cover every rule type, selectors at depths 1 and 2 and below `nestedFolders`, and a forbidden dependency through a `WORKSPACE_ENTRY_UNMAPPED` import.
+  - [x] The engine depends only on `contracts` and `domain`. It uses `createSnapshotProjector` and the shared cycle functions, without its own projection or cycle detection.
+  - [x] Each finding has a rule ID and version, severity, message, subject, evidence and fingerprint. Messages name components by path.
+  - [x] Evidence uses the compact `{ filePath, line, column, specifier, kind, role }` shape, sorted, capped per finding (ADR-0006), with the total count recorded.
+  - [x] Fingerprints use the rule ID, stable component keys and dependency endpoints, never line numbers. Tests show they stay stable across unrelated edits and across reordering the config.
+  - [x] Evaluation is deterministic: the same snapshot content, rules and engine version give identical findings in identical order.
+  - [x] A selector that matches no component produces a rule diagnostic and no silent pass.
+  - [x] Default rules ignore test files and `typeOnly` cycles.
+  - [x] `compareEvaluations` classifies findings by fingerprint as new, existing or resolved. It flags `rulesChanged` when the `rulesHash` values differ and `hierarchyChanged` when the snapshots' `analysisConfigHash` values differ.
+  - [x] Unit tests cover every rule type, selectors at depths 1 and 2 and below `nestedFolders`, and a forbidden dependency through a `WORKSPACE_ENTRY_UNMAPPED` import.
 
 ### M3.3 Add the `archmind check` CLI command
 

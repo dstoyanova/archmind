@@ -5,8 +5,9 @@ import path from "node:path";
 
 import type { AnalysisConfig } from "@archmind/contracts";
 import { canonicalJson, compareStrings } from "@archmind/domain";
+import { compileRepositoryGlob } from "@archmind/domain/repository-glob";
 import ignore, { type Ignore } from "ignore";
-import { Minimatch, minimatch } from "minimatch";
+import { minimatch } from "minimatch";
 
 import {
   PACKAGE_MANIFEST_FILE_NAME,
@@ -82,7 +83,7 @@ interface IgnoreScope {
 interface DiscoveryState {
   repositoryRoot: string;
   limits: SourceProviderLimits;
-  exclude: readonly Minimatch[];
+  exclude: readonly ReturnType<typeof compileRepositoryGlob>[];
   diagnostics: SourceProviderDiagnostic[];
   candidates: SourceFileCandidate[];
   resolutionInputs: ResolutionInputFile[];
@@ -100,9 +101,7 @@ export class LocalFsSourceProvider implements SourceProvider {
     const state: DiscoveryState = {
       repositoryRoot,
       limits: this.resolveLimits(input.limits),
-      exclude: (input.analysisConfig.exclude ?? []).map(
-        (pattern) => new Minimatch(pattern, { dot: true, nonegate: true, nocomment: true })
-      ),
+      exclude: (input.analysisConfig.exclude ?? []).map(compileRepositoryGlob),
       diagnostics: [],
       candidates: [],
       resolutionInputs: []
@@ -201,7 +200,7 @@ export class LocalFsSourceProvider implements SourceProvider {
 
       if (
         !isAnalysableSourceFile(relativePath) ||
-        state.exclude.some((pattern) => pattern.match(relativePath)) ||
+        state.exclude.some((matches) => matches(relativePath)) ||
         isGeneratedFile(relativePath)
       ) {
         continue;

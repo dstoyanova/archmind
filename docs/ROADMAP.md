@@ -70,8 +70,8 @@ Every milestone ends with a **working, demoable product**. No milestone consists
 **Goal:** answer _"what should I be concerned about?"_ before any platform investment.
 
 - [x] Rule model in `archmind.config.json`: layers, forbidden dependencies, cycles, thresholds, restricted packages. Rules have IDs, and select components by path or configured name.
-- [ ] Pure governance engine on the shared `domain` projector, with built-in default rules, producing deterministic, immutable rule evaluations.
-- [ ] Baseline comparison, marking findings as new, existing or resolved, and flagging rule and hierarchy changes.
+- [x] Pure governance engine on the shared `domain` projector, with built-in default rules, producing deterministic, immutable rule evaluations.
+- [x] Baseline comparison, marking findings as new, existing or resolved, and flagging rule and hierarchy changes.
 - [ ] `archmind check` for local and CI use, on a repository or an existing snapshot.
 - [ ] Findings API, plus findings, a health summary with analysis coverage, and graph highlighting in the local explorer.
 - [ ] Default rules validated on real repositories.

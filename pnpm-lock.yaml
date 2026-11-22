@@ -211,7 +211,20 @@ importers:
         specifier: ^3.25.76
         version: 3.25.76
 
-  packages/domain: {}
+  packages/domain:
+    dependencies:
+      minimatch:
+        specifier: ^10.1.1
+        version: 10.2.6
+
+  packages/governance-engine:
+    dependencies:
+      '@archmind/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@archmind/domain':
+        specifier: workspace:*
+        version: link:../domain
 
 packages:
 
