@@ -22,6 +22,16 @@ import {
   snapshotParamsSchema,
   workspaceParamsSchema
 } from "./explorer-schema.js";
+import {
+  baselineQuerySchema,
+  evaluationDetailSchema,
+  evaluationHealthSchema,
+  evaluationListSchema,
+  findingDetailSchema,
+  findingParamsSchema,
+  findingsPageSchema,
+  findingsQuerySchema
+} from "./governance-schema.js";
 
 const routes = [
   ["listSnapshots", "", workspaceParamsSchema, pageQuerySchema, snapshotListSchema],
@@ -69,6 +79,38 @@ const routes = [
   response: ZodTypeAny
 ][];
 
+const governanceRoutes = [
+  [
+    "listEvaluations",
+    "/snapshots/{id}/evaluations",
+    snapshotParamsSchema,
+    pageQuerySchema,
+    evaluationListSchema
+  ],
+  ["getEvaluation", "/evaluations/{id}", snapshotParamsSchema, undefined, evaluationDetailSchema],
+  [
+    "listFindings",
+    "/evaluations/{id}/findings",
+    snapshotParamsSchema,
+    findingsQuerySchema,
+    findingsPageSchema
+  ],
+  [
+    "getFinding",
+    "/evaluations/{id}/findings/{findingId}",
+    findingParamsSchema,
+    pageQuerySchema,
+    findingDetailSchema
+  ],
+  [
+    "getEvaluationHealth",
+    "/evaluations/{id}/health",
+    snapshotParamsSchema,
+    baselineQuerySchema,
+    evaluationHealthSchema
+  ]
+] as const;
+
 export function createExplorerOpenApiDocument(): ReturnType<
   OpenApiGeneratorV31["generateDocument"]
 > {
@@ -76,10 +118,17 @@ export function createExplorerOpenApiDocument(): ReturnType<
   const registry = new OpenAPIRegistry();
   const error = registry.register("ExplorerError", explorerErrorSchema);
 
-  for (const [operationId, suffix, params, query, response] of routes) {
+  const snapshotRoutes = routes.map(
+    ([operationId, suffix, params, query, response]) =>
+      [operationId, `/snapshots${suffix}`, params, query, response] as const
+  );
+  for (const [operationId, suffix, params, query, response] of [
+    ...snapshotRoutes,
+    ...governanceRoutes
+  ]) {
     registry.registerPath({
       method: "get",
-      path: `/api/workspaces/{workspaceId}/snapshots${suffix}`,
+      path: `/api/workspaces/{workspaceId}${suffix}`,
       operationId,
       request: query ? { params, query } : { params },
       responses: {
@@ -97,11 +146,11 @@ export function createExplorerOpenApiDocument(): ReturnType<
           description: "Resource not found",
           content: { "application/json": { schema: error } }
         },
-        ...(suffix === ""
+        ...(operationId === "listSnapshots"
           ? {}
           : {
               422: {
-                description: "Snapshot failed validation",
+                description: "Snapshot or evaluation failed validation",
                 content: { "application/json": { schema: error } }
               }
             }),

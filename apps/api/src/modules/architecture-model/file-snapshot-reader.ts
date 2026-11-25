@@ -1,4 +1,3 @@
-import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { constants, type BigIntStats } from "node:fs";
 import { open, readdir, type FileHandle } from "node:fs/promises";
@@ -13,6 +12,7 @@ import {
 } from "@archmind/contracts";
 import { compareStrings, createSnapshotProjector } from "@archmind/domain";
 
+import { fileFingerprint, readStableDocument } from "./local-document.js";
 import type { SnapshotLoadResult, SnapshotReader } from "./snapshot-reader.js";
 
 const MAX_SNAPSHOT_BYTES = 16 * 1024 * 1024;
@@ -25,10 +25,6 @@ interface CacheEntry<T> {
 
 function invalid(reason: string) {
   return { status: "invalid" as const, reason };
-}
-
-function fingerprint(stat: BigIntStats): string {
-  return [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(":");
 }
 
 export class FileSnapshotReader implements SnapshotReader {
@@ -111,7 +107,7 @@ export class FileSnapshotReader implements SnapshotReader {
         );
       }
 
-      const current = fingerprint(stat);
+      const current = fileFingerprint(stat);
       const cached = cache.get(identity.id);
       cache.delete(identity.id);
       if (cached?.fingerprint === current) {
@@ -144,23 +140,14 @@ async function readSnapshot(
   stat: BigIntStats,
   initialFingerprint: string
 ): Promise<SnapshotLoadResult> {
-  const buffer = Buffer.alloc(Number(stat.size) + 1);
-  let length = 0;
-  while (length < buffer.length) {
-    const { bytesRead } = await handle.read(buffer, length, buffer.length - length, length);
-    if (bytesRead === 0) break;
-    length += bytesRead;
-  }
-  if (
-    length !== Number(stat.size) ||
-    fingerprint(await handle.stat({ bigint: true })) !== initialFingerprint
-  ) {
+  const text = await readStableDocument(handle, stat, initialFingerprint);
+  if (text === undefined) {
     return invalid("Snapshot changed while being read. Retry after the write finishes.");
   }
 
   let json: unknown;
   try {
-    json = JSON.parse(buffer.toString("utf8", 0, length));
+    json = JSON.parse(text);
   } catch (error) {
     if (error instanceof SyntaxError) return invalid("Snapshot is not valid JSON.");
     throw error;

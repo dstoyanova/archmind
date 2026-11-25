@@ -7,6 +7,7 @@ import { SwaggerModule, type OpenAPIObject } from "@nestjs/swagger";
 
 import { ExplorerErrorFilter } from "./explorer-error.filter.js";
 import { ArchitectureModelModule } from "./modules/architecture-model/architecture-model.module.js";
+import { GovernanceModule } from "./modules/governance/governance.module.js";
 
 @Module({})
 class AppModule {}
@@ -18,7 +19,12 @@ export async function createExplorerApp(options: {
   const app = await NestFactory.create(
     {
       module: AppModule,
-      imports: [ArchitectureModelModule.register(options.snapshotDirectory)]
+      imports: [
+        GovernanceModule.register(
+          options.snapshotDirectory,
+          ArchitectureModelModule.register(options.snapshotDirectory)
+        )
+      ]
     },
     { abortOnError: false }
   );

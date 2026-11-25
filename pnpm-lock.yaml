@@ -53,6 +53,9 @@ importers:
       '@archmind/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@archmind/governance-engine':
+        specifier: workspace:*
+        version: link:../../packages/governance-engine
       '@asteasolutions/zod-to-openapi':
         specifier: ^7.3.4
         version: 7.3.4(zod@3.25.76)

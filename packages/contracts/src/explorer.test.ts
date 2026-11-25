@@ -229,7 +229,17 @@ describe("explorer OpenAPI", () => {
     const graph = document.paths?.[`${base}/{id}/graph`]?.get;
     const evidence = document.paths?.[`${base}/{id}/dependencies`]?.get;
 
-    expect(Object.keys(document.paths ?? {})).toHaveLength(7);
+    expect(Object.keys(document.paths ?? {})).toHaveLength(12);
+    const workspace = "/api/workspaces/{workspaceId}";
+    expect(document.paths).toMatchObject({
+      [`${base}/{id}/evaluations`]: { get: { operationId: "listEvaluations" } },
+      [`${workspace}/evaluations/{id}`]: { get: { operationId: "getEvaluation" } },
+      [`${workspace}/evaluations/{id}/findings`]: { get: { operationId: "listFindings" } },
+      [`${workspace}/evaluations/{id}/findings/{findingId}`]: {
+        get: { operationId: "getFinding" }
+      },
+      [`${workspace}/evaluations/{id}/health`]: { get: { operationId: "getEvaluationHealth" } }
+    });
     expect(graph?.parameters).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

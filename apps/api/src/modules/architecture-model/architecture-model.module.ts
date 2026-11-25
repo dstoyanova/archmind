@@ -14,6 +14,7 @@ export class ArchitectureModelModule {
   static register(snapshotDirectory: string): DynamicModule {
     return {
       module: ArchitectureModelModule,
+      exports: [SNAPSHOT_READER, LocalWorkspaceGuard],
       providers: [
         { provide: SNAPSHOT_READER, useFactory: () => new FileSnapshotReader(snapshotDirectory) }
       ]

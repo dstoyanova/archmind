@@ -83,7 +83,7 @@ Packages should be introduced as needed rather than created as empty placeholder
 ## Core components
 
 - **Web:** User interface and architecture visualisation.
-- **API:** Authentication, workspaces, repositories and application services. In M2 the read-only explorer serves one local workspace through a file-based `SnapshotReader`; the reader checks snapshot integrity and caches validated indexes.
+- **API:** Authentication, workspaces, repositories and application services. The read-only explorer serves one local workspace through file-based `SnapshotReader` and `EvaluationReader` adapters. The governance module links evaluations to snapshots by content hash and computes baseline status on read.
 - **Worker:** Background repository analysis and processing. Analysis runs in an isolated child process (_proposed_, ADR-0007).
 - **CLI:** Local analysis and rule checks, including in CI.
 - **Code Analysis:** Parse source files and extract symbols and dependencies.

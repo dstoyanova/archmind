@@ -92,7 +92,7 @@ export const dependencyEvidenceQuerySchema = projectionQuerySchema.merge(pageQue
   to: id.describe("Visible target component ID.")
 });
 
-function pageOf<T extends z.ZodTypeAny>(item: T) {
+export function pageOf<T extends z.ZodTypeAny>(item: T) {
   return z.object({
     items: z.array(item),
     nextCursor: cursor.nullable().describe("Null on the last page.")
