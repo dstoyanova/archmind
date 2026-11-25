@@ -87,3 +87,5 @@ The repository path selects the config; it defaults to the working directory whe
 The CLI writes the evaluation before reporting violations or rule diagnostics. Use a separate path for a baseline you want to keep.
 
 The CLI governance fixtures are analyzer inputs, not Vitest suites. Vitest skips `fixtures/` directories, so test-role inputs can keep their `.test.ts` filenames.
+
+To browse findings, place the snapshot and its evaluation in the explorer's snapshot directory, then select the evaluation under **Governance findings**. Optionally select a baseline snapshot and evaluation to filter by finding status. Graph badges count findings on visible components and their collapsed descendants. **Show on graph** opens the subject with the recorded rule scope. If an older evaluation does not record scope, rerun `archmind check --snapshot <snapshot.json>` to enable that jump.

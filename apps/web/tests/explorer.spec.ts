@@ -74,7 +74,7 @@ test("refresh preserves a selection from a later page and falls back when it dis
       json: secondPage
         ? { items: items.filter(({ label }) => label === "fixture.json"), nextCursor: null }
         : {
-            items: items.filter(({ label }) => label !== "fixture.json"),
+            items: items.filter(({ label }) => label === "performance.json"),
             nextCursor: removeSelected ? null : "later-page"
           }
     });
@@ -275,6 +275,44 @@ test("hides components without files in the selected roles until asked", async (
   await expect(page.getByRole("button", { name: /fixtures \/ packages\/fixtures/ })).toBeVisible();
 });
 
+test("jumps from a collapsed finding to its subject and evidence", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("combobox", { name: "Snapshot", exact: true }).click();
+  await page.getByRole("option", { name: "governance.json", exact: true }).click();
+  await page.getByRole("combobox", { name: "Evaluation", exact: true }).click();
+  await page.getByRole("option", { name: "governance.evaluation.json", exact: true }).click();
+  await page.getByRole("combobox", { name: "Baseline snapshot", exact: true }).click();
+  await page.getByRole("option", { name: "governance.json", exact: true }).click();
+  await page.getByRole("combobox", { name: "Baseline evaluation", exact: true }).click();
+  await page.getByRole("option", { name: "governance-base.evaluation.json", exact: true }).click();
+  await page.getByRole("combobox", { name: "Status", exact: true }).click();
+  await page.getByRole("option", { name: "new", exact: true }).click();
+  const graph = page.getByRole("region", { name: "Architecture graph" });
+  await expect(graph.getByTestId("finding-count")).toHaveText("7");
+  await expect(graph.getByRole("button", { name: "Details for test-a", exact: true })).toHaveCount(
+    0
+  );
+  const finding = page.getByRole("button", { name: /test-cycle: Dependency cycle/ });
+  await finding.focus();
+  await page.keyboard.press("Enter");
+  await page.getByRole("link", { name: "Jump to evidence" }).click();
+  await expect(page.getByRole("region", { name: "Finding evidence" })).toContainText(
+    "src/test-a/cycle.test.ts"
+  );
+  await page.getByRole("button", { name: "Show on graph" }).click();
+  await expect(
+    graph.getByRole("button", { name: "Details for test-a", exact: true })
+  ).toBeVisible();
+  await expect(
+    graph.getByRole("button", { name: "Details for test-b", exact: true })
+  ).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: "test", exact: true })).toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "Include type-only imports" })).not.toBeChecked();
+  await expect(
+    page.getByRole("checkbox", { name: "Show components without files in these roles" })
+  ).toBeChecked();
+});
+
 test("measures first paint and expand/collapse for the 300-component fixture", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("combobox", { name: "Snapshot" }).click();
@@ -305,6 +343,17 @@ test("measures first paint and expand/collapse for the 300-component fixture", a
     if (env.ARCHMIND_ENFORCE_RENDER_BUDGET === "1") expect(elapsed, label).toBeLessThan(budget);
   };
   await measure("First render", () => select.click(), 299, 2000);
+  await page.getByRole("combobox", { name: "Evaluation", exact: true }).click();
+  await page.getByRole("option", { name: "performance.evaluation.json", exact: true }).click();
+  await expect(graph.getByTestId("finding-count")).toHaveCount(298);
+  await expect(
+    graph
+      .getByTestId("component-node")
+      .filter({
+        has: page.getByRole("button", { name: "Details for component-0", exact: true })
+      })
+      .getByTestId("finding-count")
+  ).toHaveText("2");
   await measure(
     "Expand",
     () => graph.getByRole("button", { name: "Expand component-0", exact: true }).click(),
@@ -312,6 +361,7 @@ test("measures first paint and expand/collapse for the 300-component fixture", a
     500
   );
   await expect(graph.locator(".react-flow__edge.runtime-cycle")).toHaveCount(3000);
+  await expect(graph.getByTestId("finding-count")).toHaveCount(299);
   await measure(
     "Collapse",
     () => graph.getByRole("button", { name: "Collapse component-0", exact: true }).click(),

@@ -2,12 +2,19 @@ import { z } from "zod";
 
 import { dependencyEvidenceSchema } from "./explorer-schema.js";
 import { ruleSeveritySchema } from "./rules-schema.js";
+import { fileRoleSchema } from "./snapshot-schema.js";
 
 export const RULE_EVALUATION_SCHEMA_VERSION = "1";
 export const FINDING_EVIDENCE_LIMIT = 20;
 
 const id = z.string().min(1);
 const sha256 = z.string().regex(/^[a-f0-9]{64}$/u);
+export const findingGraphScopeSchema = z
+  .object({
+    roles: z.array(fileRoleSchema).nonempty(),
+    includeTypeOnly: z.boolean()
+  })
+  .strict();
 
 export const findingSubjectSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("components"), componentIds: z.array(id).min(1) }).strict(),
@@ -22,6 +29,7 @@ export const ruleFindingSchema = z
     severity: ruleSeveritySchema,
     message: id,
     subject: findingSubjectSchema,
+    graphScope: findingGraphScopeSchema.optional(),
     evidence: z.array(dependencyEvidenceSchema.strict()).max(FINDING_EVIDENCE_LIMIT),
     evidenceTotal: z.number().int().nonnegative(),
     fingerprint: sha256

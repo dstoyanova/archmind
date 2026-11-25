@@ -3,6 +3,7 @@
 import {
   MAX_PROJECTION_EXPANSIONS,
   type ComponentGraph,
+  type FindingSummary,
   type SnapshotList
 } from "@archmind/contracts";
 import { Network } from "lucide-react";
@@ -26,6 +27,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { fetchGraph, fetchSnapshots } from "./api";
 import { graphEdges } from "./edges";
+import { findingComponents, FindingsPanel, type ReadySnapshot } from "./findings-panel";
 import { componentLabels } from "./labels";
 import { ComponentPanel } from "./component-panel";
 import { SnapshotOverviewPanel } from "./snapshot-overview";
@@ -44,13 +46,59 @@ const FileDrilldown = dynamic(
   }
 );
 const roles = ["source", "test", "story", "script", "config"] as const;
+
+function fetchFullGraph(id: string, signal: AbortSignal) {
+  return fetchGraph(
+    id,
+    new URLSearchParams({ depth: String(Number.MAX_SAFE_INTEGER), includeEmptyComponents: "true" }),
+    signal
+  );
+}
 type Role = (typeof roles)[number];
 type Component = ComponentGraph["components"][number];
+type FindingJump = {
+  scope: NonNullable<FindingSummary["graphScope"]>;
+  expanded: ReadonlySet<string>;
+  focus: string | null;
+};
 type Listing = SnapshotList | { error: string };
 const preferredSnapshotId = ({ items }: SnapshotList) =>
   (items.find((item) => item.status === "ready") ?? items[0])?.id;
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "Something went wrong.";
+
+function planFindingJump(
+  finding: FindingSummary,
+  index: ReadonlyMap<string, Component>,
+  expanded: ReadonlySet<string>
+): FindingJump {
+  if (!finding.graphScope)
+    throw new Error(
+      "This evaluation does not record graph scope. Run archmind check again to enable graph navigation."
+    );
+  const subjects = findingComponents(finding);
+  const next = new Set(expanded);
+  for (const id of subjects) {
+    const component = index.get(id);
+    if (!component) throw new Error("The finding subject is not available in this snapshot.");
+    let parent = index.get(component.parentId ?? "");
+    while (parent && parent.depth >= 1) {
+      next.add(parent.id);
+      parent = index.get(parent.parentId ?? "");
+    }
+  }
+  if (next.size > MAX_PROJECTION_EXPANSIONS)
+    throw new Error("Collapse some graph components before jumping to this finding.");
+  return { scope: finding.graphScope, expanded: next, focus: subjects[0] ?? null };
+}
+
+function focusGraph() {
+  globalThis.requestAnimationFrame(() => {
+    const graph = globalThis.document.getElementById("architecture-graph");
+    graph?.scrollIntoView({ block: "nearest" });
+    graph?.focus({ preventScroll: true });
+  });
+}
 
 export function Explorer({
   initial,
@@ -66,6 +114,7 @@ export function Explorer({
   );
   const [listPending, setListPending] = useState(false);
   const [listError, setListError] = useState<string>();
+  const [jump, setJump] = useState<FindingJump>();
   const selected =
     "items" in listing ? listing.items.find(({ id }) => id === selectedId) : undefined;
 
@@ -87,7 +136,10 @@ export function Explorer({
           items.push(...page.items);
         }
       }
-      const next = { items, nextCursor: page.nextCursor };
+      const next = {
+        items: [...new Map(items.map((item) => [item.id, item])).values()],
+        nextCursor: page.nextCursor
+      };
       setListing(next);
       setSelectedId((id) =>
         items.some((item) => item.id === id) ? id : preferredSnapshotId(next)
@@ -138,7 +190,14 @@ export function Explorer({
         {"items" in listing && listing.items.length > 0 && (
           <div className="space-y-1.5">
             <Label htmlFor="snapshot">Snapshot</Label>
-            <Select value={selectedId} onValueChange={setSelectedId} disabled={listPending}>
+            <Select
+              value={selectedId}
+              onValueChange={(id) => {
+                setJump(undefined);
+                setSelectedId(id);
+              }}
+              disabled={listPending}
+            >
               <SelectTrigger id="snapshot" className="min-w-60 max-w-[85vw]">
                 <SelectValue />
               </SelectTrigger>
@@ -195,28 +254,59 @@ export function Explorer({
       {selected?.status === "ready" && (
         <div className="space-y-4" key={`${selected.id}:${selected.contentHash}`}>
           <SnapshotOverviewPanel id={selected.id} />
-          <SnapshotGraph id={selected.id} theme={theme} />
+          <SnapshotGraph
+            id={selected.id}
+            theme={theme}
+            initialJump={jump}
+            onOpenSnapshot={(snapshot, plan) => {
+              setListing((previous) =>
+                "items" in previous && !previous.items.some(({ id }) => id === snapshot.id)
+                  ? { ...previous, items: [...previous.items, snapshot] }
+                  : previous
+              );
+              setJump(plan);
+              setSelectedId(snapshot.id);
+              focusGraph();
+            }}
+          />
         </div>
       )}
     </main>
   );
 }
 
-function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+function SnapshotGraph({
+  id,
+  theme,
+  initialJump,
+  onOpenSnapshot
+}: {
+  id: string;
+  theme: ThemePreference;
+  initialJump: FindingJump | undefined;
+  onOpenSnapshot: (snapshot: ReadySnapshot, plan: FindingJump) => void;
+}) {
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(
+    () => initialJump?.expanded ?? new Set()
+  );
   const [expansionBlocked, setExpansionBlocked] = useState(false);
-  const [enabledRoles, setRoles] = useState<readonly Role[]>(["source"]);
-  const [showEmpty, setShowEmpty] = useState(false);
-  const [typeOnly, setTypeOnly] = useState(true);
+  const [enabledRoles, setRoles] = useState<readonly Role[]>(
+    initialJump?.scope.roles ?? ["source"]
+  );
+  const [showEmpty, setShowEmpty] = useState(initialJump !== undefined);
+  const [typeOnly, setTypeOnly] = useState(initialJump?.scope.includeTypeOnly ?? true);
   const [internal, setInternal] = useState(true);
   const [external, setExternal] = useState(true);
   const [search, setSearch] = useState("");
-  const [focused, setFocused] = useState<string | null>(null);
+  const [focused, setFocused] = useState<string | null>(initialJump?.focus ?? null);
   const [detailId, setDetailId] = useState<string>();
   const [showFiles, setShowFiles] = useState(false);
   const [showList, setShowList] = useState(false);
-  const [catalog, setCatalog] = useState<Component[]>();
+  const [findings, setFindings] = useState<FindingSummary[]>([]);
+  const [scopedCatalog, setScopedCatalog] = useState<{ query: string; components: Component[] }>();
+  const [fullCatalog, setFullCatalog] = useState<Component[]>();
   const [catalogError, setCatalogError] = useState<string>();
+  const [fullCatalogError, setFullCatalogError] = useState<string>();
   const [result, setResult] = useState<{
     graph: ComponentGraph;
     nodes: ExplorerNode[];
@@ -236,6 +326,7 @@ function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
     return params.toString();
   }, [roleQuery, expanded, typeOnly]);
   const generation = JSON.stringify([query, external, attempt]);
+  const catalog = scopedCatalog?.query === roleQuery ? scopedCatalog.components : undefined;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -244,7 +335,7 @@ function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
     void fetchGraph(id, params, controller.signal).then(
       (graph) => {
         if (!controller.signal.aborted) {
-          setCatalog(graph.components);
+          setScopedCatalog({ query: roleQuery, components: graph.components });
           setCatalogError(undefined);
         }
       },
@@ -254,6 +345,24 @@ function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
     );
     return () => controller.abort();
   }, [id, attempt, roleQuery]);
+
+  const needsFullCatalog = findings.length > 0 && fullCatalog === undefined;
+  useEffect(() => {
+    if (!needsFullCatalog) return;
+    const controller = new AbortController();
+    void fetchFullGraph(id, controller.signal).then(
+      (graph) => {
+        if (!controller.signal.aborted) {
+          setFullCatalog(graph.components);
+          setFullCatalogError(undefined);
+        }
+      },
+      (reason: unknown) => {
+        if (!controller.signal.aborted) setFullCatalogError(errorMessage(reason));
+      }
+    );
+    return () => controller.abort();
+  }, [id, attempt, needsFullCatalog]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -274,16 +383,40 @@ function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
     return () => controller.abort();
   }, [id, query, external, generation]);
 
+  const completeCatalog = fullCatalog ?? catalog;
   const componentIndex = useMemo(
-    () => new Map(catalog?.map((component) => [component.id, component])),
-    [catalog]
+    () => new Map(completeCatalog?.map((component) => [component.id, component])),
+    [completeCatalog]
   );
   const expandable = useMemo(
     () => new Set(catalog?.flatMap(({ parentId }) => (parentId ? [parentId] : []))),
     [catalog]
   );
   const visible = result?.graph.components;
-  const labels = useMemo(() => componentLabels(visible ?? []), [visible]);
+  const labels = useMemo(
+    () => componentLabels(completeCatalog ?? visible ?? []),
+    [completeCatalog, visible]
+  );
+  const findingCounts = useMemo(() => {
+    const visibleIds = new Set(visible?.map(({ id }) => id));
+    const counts = new Map<string, number>();
+    const nearest = new Map<string, string | undefined>();
+    for (const finding of findings) {
+      const targets = new Set<string>();
+      for (const id of findingComponents(finding)) {
+        if (!nearest.has(id)) {
+          let candidate: string | undefined = id;
+          while (candidate && !visibleIds.has(candidate))
+            candidate = componentIndex.get(candidate)?.parentId;
+          nearest.set(id, candidate);
+        }
+        const target = nearest.get(id);
+        if (target) targets.add(target);
+      }
+      for (const target of targets) counts.set(target, (counts.get(target) ?? 0) + 1);
+    }
+    return counts;
+  }, [componentIndex, findings, visible]);
   const detail = detailId
     ? (componentIndex.get(detailId) ?? visible?.find((item) => item.id === detailId))
     : undefined;
@@ -362,6 +495,46 @@ function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
     });
   }
 
+  async function jumpToFinding(
+    finding: FindingSummary,
+    target?: ReadySnapshot
+  ): Promise<string | undefined> {
+    try {
+      if (target && target.id !== id) {
+        const graph = await fetchFullGraph(target.id, AbortSignal.timeout(10_000));
+        onOpenSnapshot(
+          target,
+          planFindingJump(
+            finding,
+            new Map(graph.components.map((component) => [component.id, component])),
+            new Set()
+          )
+        );
+        return;
+      }
+      let index = componentIndex;
+      if (!fullCatalog && !findingComponents(finding).every((subject) => index.has(subject))) {
+        const graph = await fetchFullGraph(id, AbortSignal.timeout(10_000));
+        index = new Map(graph.components.map((component) => [component.id, component]));
+        setFullCatalog(graph.components);
+        setFullCatalogError(undefined);
+      }
+      const plan = planFindingJump(finding, index, expanded);
+      setExpanded(plan.expanded);
+      setRoles(plan.scope.roles);
+      setTypeOnly(plan.scope.includeTypeOnly);
+      setShowEmpty(true);
+      setInternal(true);
+      setExternal(true);
+      setFocused(plan.focus);
+      setShowList(false);
+      setShowFiles(false);
+      focusGraph();
+    } catch (reason) {
+      return errorMessage(reason);
+    }
+  }
+
   return (
     <div
       className={`grid gap-4 ${detail && !showFiles ? "lg:grid-cols-[17rem_minmax(0,1fr)] xl:grid-cols-[17rem_minmax(0,1fr)_20rem]" : "lg:grid-cols-[17rem_minmax(0,1fr)]"}`}
@@ -410,10 +583,12 @@ function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
                     : "Searching available components…"}
                 </p>
               ))}
-            {catalogError && (
+            {(catalogError || (needsFullCatalog && fullCatalogError)) && (
               <Alert variant="destructive">
                 <AlertDescription>
-                  Could not load all component names. {catalogError}
+                  {catalogError
+                    ? `Could not load all component names. ${catalogError}`
+                    : `Could not load the component hierarchy for finding highlights. ${fullCatalogError}`}
                   <Button variant="ghost" onClick={() => setAttempt((value) => value + 1)}>
                     Retry
                   </Button>
@@ -515,6 +690,8 @@ function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
           <section
             hidden={showList && !currentError}
             aria-label="Architecture graph"
+            id="architecture-graph"
+            tabIndex={-1}
             aria-busy={busy}
             className="relative h-[70dvh] min-h-[480px] overflow-hidden rounded-xl border bg-background lg:h-[calc(100dvh-11rem)]"
           >
@@ -542,6 +719,7 @@ function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
                   expandable,
                   expanded,
                   cycles: edgeView.cycles,
+                  findingCounts,
                   focused,
                   toggle,
                   select: setDetailId
@@ -577,6 +755,14 @@ function SnapshotGraph({ id, theme }: { id: string; theme: ThemePreference }) {
           onDrillDown={() => setShowFiles(true)}
         />
       )}
+      <div className="min-w-0 lg:col-span-full">
+        <FindingsPanel
+          snapshotId={id}
+          labels={labels}
+          onHighlight={setFindings}
+          onJump={jumpToFinding}
+        />
+      </div>
     </div>
   );
 }

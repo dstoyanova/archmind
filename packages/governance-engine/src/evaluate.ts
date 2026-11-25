@@ -156,6 +156,13 @@ export function evaluate(
         ruleVersion,
         severity: rule.severity,
         subject,
+        graphScope:
+          rule.type === "threshold"
+            ? { roles: ["source"], includeTypeOnly: true }
+            : {
+                roles: ["source", ...rule.scope.additionalFileRoles],
+                includeTypeOnly: rule.scope.includeTypeOnly
+              },
         message,
         evidence: evidence.slice(0, FINDING_EVIDENCE_LIMIT),
         evidenceTotal: evidence.length,

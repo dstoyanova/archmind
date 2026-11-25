@@ -74,7 +74,7 @@ Every milestone ends with a **working, demoable product**. No milestone consists
 - [x] Baseline comparison, marking findings as new, existing or resolved, and flagging rule and hierarchy changes.
 - [x] `archmind check` for local and CI use, on a repository or an existing snapshot.
 - [x] Findings API with paginated evidence, baseline comparison and a health summary with analysis coverage.
-- [ ] Findings, health summary and graph highlighting in the local explorer UI.
+- [x] Findings, health summary and graph highlighting in the local explorer UI.
 - [ ] Default rules validated on real repositories.
 
 **Outcome:** risks and rule violations are visible with file-level evidence, both locally and in CI.

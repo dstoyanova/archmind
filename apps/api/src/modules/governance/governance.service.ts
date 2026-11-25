@@ -48,7 +48,16 @@ function metadata(identity: EvaluationIdentity, evaluation: RuleEvaluation) {
 }
 
 function summary(evaluationId: string, finding: RuleFinding): FindingSummary {
-  const { fingerprint, ruleId, ruleVersion, severity, message, subject, evidenceTotal } = finding;
+  const {
+    fingerprint,
+    ruleId,
+    ruleVersion,
+    severity,
+    message,
+    subject,
+    evidenceTotal,
+    graphScope
+  } = finding;
   return {
     id: fingerprint,
     evaluationId,
@@ -58,6 +67,7 @@ function summary(evaluationId: string, finding: RuleFinding): FindingSummary {
     severity,
     message,
     subject,
+    graphScope,
     evidenceTotal
   };
 }

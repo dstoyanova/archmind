@@ -6,7 +6,11 @@ import {
   pageQuerySchema,
   snapshotParamsSchema
 } from "./explorer-schema.js";
-import { findingSubjectSchema, ruleEvaluationSchema } from "./rule-evaluation-schema.js";
+import {
+  findingGraphScopeSchema,
+  findingSubjectSchema,
+  ruleEvaluationSchema
+} from "./rule-evaluation-schema.js";
 import { ruleSeveritySchema } from "./rules-schema.js";
 
 const id = z.string().min(1);
@@ -44,6 +48,7 @@ export const findingSummarySchema = z.object({
   severity: ruleSeveritySchema,
   message: id,
   subject: findingSubjectSchema,
+  graphScope: findingGraphScopeSchema.optional(),
   evidenceTotal: count,
   status: findingStatusSchema.optional()
 });

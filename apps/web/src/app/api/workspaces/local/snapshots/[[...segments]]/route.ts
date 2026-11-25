@@ -12,7 +12,7 @@ export async function GET(
     (/^[a-f0-9]{64}$/.test(id ?? "") &&
       (segments.length === 1 ||
         (segments.length === 2 &&
-          ["graph", "diagnostics", "dependencies"].includes(resource ?? "")) ||
+          ["graph", "diagnostics", "dependencies", "evaluations"].includes(resource ?? "")) ||
         (resource === "components" &&
           component &&
           component !== "." &&

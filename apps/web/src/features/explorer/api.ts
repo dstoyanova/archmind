@@ -4,6 +4,10 @@ import {
   componentGraphSchema,
   dependencyEvidencePageSchema,
   diagnosticsPageSchema,
+  evaluationHealthSchema,
+  evaluationListSchema,
+  findingDetailSchema,
+  findingsPageSchema,
   explorerErrorSchema,
   fileGraphSchema,
   snapshotListSchema,
@@ -25,9 +29,9 @@ async function request(url: string, signal?: AbortSignal): Promise<unknown> {
   return response.json();
 }
 
-export async function fetchSnapshots(origin = "", cursor?: string) {
+export async function fetchSnapshots(origin = "", cursor?: string, signal?: AbortSignal) {
   const query = cursor ? `?${new URLSearchParams({ cursor })}` : "";
-  return snapshotListSchema.parse(await request(`${origin}${snapshotPath}${query}`));
+  return snapshotListSchema.parse(await request(`${origin}${snapshotPath}${query}`, signal));
 }
 
 export async function fetchGraph(id: string, options: URLSearchParams, signal: AbortSignal) {
@@ -122,4 +126,55 @@ export async function fetchFileGraph(
   query.set("level", "file");
   query.set("componentId", component);
   return fileGraphSchema.parse(await snapshotRequest(id, "graph", query, signal));
+}
+
+export async function fetchEvaluations(id: string, cursor: string | null, signal: AbortSignal) {
+  return evaluationListSchema.parse(
+    await snapshotRequest(id, "evaluations", pageQuery(cursor), signal)
+  );
+}
+
+function evaluationRequest(
+  id: string,
+  resource: string,
+  query: URLSearchParams,
+  signal: AbortSignal
+) {
+  return request(
+    `/api/workspaces/local/evaluations/${encodeURIComponent(id)}/${resource}?${query}`,
+    signal
+  );
+}
+
+export async function fetchFindings(
+  id: string,
+  filters: string,
+  cursor: string | null,
+  signal: AbortSignal
+) {
+  const query = new URLSearchParams(filters);
+  if (cursor) query.set("cursor", cursor);
+  return findingsPageSchema.parse(await evaluationRequest(id, "findings", query, signal));
+}
+
+export async function fetchFinding(
+  id: string,
+  findingId: string,
+  cursor: string | null,
+  signal: AbortSignal
+) {
+  return findingDetailSchema.parse(
+    await evaluationRequest(
+      id,
+      `findings/${encodeURIComponent(findingId)}`,
+      pageQuery(cursor),
+      signal
+    )
+  );
+}
+
+export async function fetchHealth(id: string, baseline: string, signal: AbortSignal) {
+  const query = new URLSearchParams();
+  if (baseline) query.set("baseline", baseline);
+  return evaluationHealthSchema.parse(await evaluationRequest(id, "health", query, signal));
 }

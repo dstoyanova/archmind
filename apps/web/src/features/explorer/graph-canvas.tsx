@@ -22,6 +22,7 @@ interface Interaction {
   expandable: ReadonlySet<string>;
   expanded: ReadonlySet<string>;
   cycles: ReadonlyMap<string, "type-cycle" | "runtime-cycle">;
+  findingCounts?: ReadonlyMap<string, number>;
   focused: string | null;
   toggle(id: string): void;
   select(id: string): void;
@@ -34,6 +35,7 @@ const GraphComponent = memo(function GraphComponent({ id, data }: NodeProps<Comp
   const { component, label } = data;
   const expanded = interaction?.expanded.has(id) ?? false;
   const cycle = interaction?.cycles.get(id);
+  const findings = interaction?.findingCounts?.get(id);
   return (
     <div
       data-testid="component-node"
@@ -41,6 +43,16 @@ const GraphComponent = memo(function GraphComponent({ id, data }: NodeProps<Comp
       className={`graph-node ${cycle ?? ""} ${data.grouped ? "group-node" : ""} ${interaction?.focused === id ? "focused-node" : ""}`}
     >
       <Handle type="target" position={Position.Left} isConnectable={false} />
+      {findings !== undefined && (
+        <Badge
+          variant="destructive"
+          className="pointer-events-none absolute right-0 -top-2 z-10"
+          aria-label={`${findings} ${findings === 1 ? "finding" : "findings"}`}
+          data-testid="finding-count"
+        >
+          {findings}
+        </Badge>
+      )}
       <div className="flex items-start gap-2 p-2.5">
         <div className="min-w-0 flex-1">
           <Button

@@ -22,6 +22,8 @@ On an Apple M4 developer laptop (headless Chromium 159, 1440 × 900 viewport), a
 
 CI checks that the graph renders and logs the timings. Set `ARCHMIND_ENFORCE_RENDER_BUDGET=1` to enforce the laptop budgets on a comparable machine.
 
+The M3.5 benchmark also selects a governance evaluation with 299 findings before measuring expand and collapse. It verifies 298 badges while collapsed (two findings share a visible ancestor) and 299 after expansion. With budgets enforced, the first render took 390 ms, expand with highlights took 418 ms, and collapse with highlights took 366 ms.
+
 ## Layout decision
 
 [E3 of the M2 code review](../code-reviews/m2-code-review.md) asked whether the explorer should keep ELK `box` packing. The screenshots are in [m2-layout-screenshots](./m2-layout-screenshots), captured in headless Chromium at 1440 × 900 with default filters, for Vitest and Changesets at the M2.7 revisions. The `box` screenshots were taken with the hiding of components without source files already applied, so Vitest shows 23 components rather than the 43 of the M2.7 run.

@@ -289,15 +289,15 @@ Add a findings list and detail view, graph highlighting and a health summary to 
 
 - **Depends on:** M3.4, M2.5
 - **Acceptance criteria:**
-  - [ ] Users can select an evaluation, and optionally a baseline, for the current snapshot. The list filters by severity, rule and status.
-  - [ ] Findings on hidden components are highlighted on their nearest visible ancestor, with a count.
-  - [ ] Jumping from a finding expands the graph to its subject and applies the rule's role and type-only scope. It also shows components that are hidden because they have no files in the selected roles.
-  - [ ] You can jump from a finding to its evidence.
-  - [ ] Labels qualify repeated component names with their path, as in M2 (E4).
-  - [ ] The health summary shows analysis coverage next to the finding counts, and explains `WORKSPACE_ENTRY_UNMAPPED` as the snapshot overview does.
-  - [ ] Highlighting keeps the explorer within the M2 performance budgets in [explorer-performance.md](development/explorer-performance.md).
-  - [ ] The findings list is keyboard-navigable (NFR-14).
-  - [ ] Covered by a Playwright test, including a finding on a collapsed component.
+  - [x] Users can select an evaluation, and optionally a baseline, for the current snapshot. The list filters by severity, rule and status.
+  - [x] Findings on hidden components are highlighted on their nearest visible ancestor, with a count.
+  - [x] Jumping from a finding expands the graph to its subject and applies the rule's role and type-only scope. It also shows components that are hidden because they have no files in the selected roles.
+  - [x] You can jump from a finding to its evidence.
+  - [x] Labels qualify repeated component names with their path, as in M2 (E4).
+  - [x] The health summary shows analysis coverage next to the finding counts, and explains `WORKSPACE_ENTRY_UNMAPPED` as the snapshot overview does.
+  - [x] Highlighting keeps the explorer within the M2 performance budgets in [explorer-performance.md](development/explorer-performance.md).
+  - [x] The findings list is keyboard-navigable (NFR-14).
+  - [x] Covered by a Playwright test, including a finding on a collapsed component.
 
 ### M3.6 Validate default rules on real repositories
 

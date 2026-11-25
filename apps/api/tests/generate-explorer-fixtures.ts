@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { env } from "node:process";
 import { fileURLToPath, URL } from "node:url";
@@ -8,6 +8,8 @@ import {
   buildArchitectureSnapshot,
   type SnapshotBuilderInput
 } from "@archmind/architecture-engine";
+import { archmindConfigSchema, rulesConfigSchema } from "@archmind/contracts";
+import { evaluate, GOVERNANCE_ENGINE_VERSION } from "@archmind/governance-engine";
 
 const directory = env.ARCHMIND_SNAPSHOT_DIR;
 if (!directory) throw new Error("Provide ARCHMIND_SNAPSHOT_DIR.");
@@ -59,7 +61,7 @@ for (let index = 0; index < 3000; index++) {
 const dense = buildArchitectureSnapshot({
   engineVersion: "benchmark",
   parserVersion: "benchmark",
-  analysisConfigHash: "benchmark",
+  analysisConfigHash: "a".repeat(64),
   source: { kind: "local", sourceHash: "benchmark" },
   components,
   ownership,
@@ -73,6 +75,51 @@ if (dense.components.length !== 300 || dense.dependencies.length !== 3000) {
   throw new Error("Performance snapshot has an unexpected graph size.");
 }
 await writeFile(join(directory, "performance.json"), JSON.stringify(dense));
+const denseRules = rulesConfigSchema.parse({
+  disableDefaults: ["archmind/no-cycles", "archmind/high-coupling"],
+  definitions: [
+    {
+      id: "size",
+      type: "threshold",
+      severity: "warning",
+      components: [{ path: "modules/*" }],
+      metric: "fileCount",
+      max: 0
+    }
+  ]
+});
+await writeFile(
+  join(directory, "performance.evaluation.json"),
+  JSON.stringify(evaluate(dense, denseRules, GOVERNANCE_ENGINE_VERSION))
+);
+
+const governanceRoot = fileURLToPath(new URL("../../cli/fixtures/governance/", import.meta.url));
+const { snapshot: governance } = await analyzeRepository({ repositoryRoot: governanceRoot });
+const governanceRules = archmindConfigSchema.parse(
+  JSON.parse(await readFile(join(governanceRoot, "archmind.config.json"), "utf8"))
+).rules;
+await writeFile(join(directory, "governance.json"), JSON.stringify(governance));
+const scopedRules = rulesConfigSchema.parse({
+  ...governanceRules,
+  definitions: [
+    ...governanceRules.definitions,
+    {
+      id: "test-cycle",
+      type: "no-cycles",
+      severity: "warning",
+      components: [{ path: "src/test-*" }],
+      scope: { additionalFileRoles: ["test"], includeTypeOnly: false }
+    }
+  ]
+});
+await writeFile(
+  join(directory, "governance.evaluation.json"),
+  JSON.stringify(evaluate(governance, scopedRules, GOVERNANCE_ENGINE_VERSION))
+);
+await writeFile(
+  join(directory, "governance-base.evaluation.json"),
+  JSON.stringify(evaluate(governance, governanceRules, GOVERNANCE_ENGINE_VERSION))
+);
 
 // Two components named "pre", and a package that only has test files.
 const sharedComponents: SnapshotBuilderInput["components"] = [
