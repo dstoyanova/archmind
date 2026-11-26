@@ -91,7 +91,7 @@ Priority legend:
 
 - **Status:** Verified. After `pnpm --filter @archmind/cli build`, `node apps/cli/dist/src/main.js analyze …` fails with `ERR_MODULE_NOT_FOUND` for `packages/architecture-engine/src/component-hierarchy-mapper.js` (imported from `index.ts`). The documented `pnpm dlx tsx apps/cli/src/main.ts analyze …` works, but it downloads an unpinned `tsx` and `tsx` is not a repo dependency.
 - **Problem:** `bin` points to `dist/src/main.js`, but every `@archmind/*` package exports `./src/index.ts` and sources import `./x.js`, so the built output cannot run.
-  - [cli-analyze.md](./cli-analyze.md) works around this with an unpinned `pnpm dlx tsx`. That downloads and executes an unpinned package on each run, and makes the documented "build" prerequisite pointless.
+  - The CLI guide (`docs/development/cli-analyze.md`, now merged into the README) worked around this with an unpinned `pnpm dlx tsx`. That downloads and executes an unpinned package on each run, and makes the documented "build" prerequisite pointless.
 - **Actions:**
   - [x] Either add a pinned `tsx` devDependency and use it in scripts and docs, or bundle the CLI so `bin` works.
   - [x] Add a CI step that runs `archmind analyze` on a fixture.
