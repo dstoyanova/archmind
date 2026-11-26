@@ -90,6 +90,8 @@ const components: ArchitectureComponent[] = [
 type Edge = {
   from: string;
   to?: string;
+  specifier?: string;
+  builtIn?: boolean;
   packageName?: string;
   role?: FileRole;
   kind?: FileImport["kind"];
@@ -97,8 +99,11 @@ type Edge = {
   workspace?: boolean;
 };
 
-function snapshot(edges: readonly Edge[]): ArchitectureSnapshot {
-  const files = components.flatMap(({ id }) =>
+function snapshot(
+  edges: readonly Edge[],
+  list: readonly ArchitectureComponent[] = components
+): ArchitectureSnapshot {
+  const files = list.flatMap(({ id }) =>
     (["source", "test"] as const).map((role) => ({
       id: `${id}:${role}`,
       path: `${id}/index${role === "test" ? ".test" : ""}.ts`,
@@ -112,7 +117,17 @@ function snapshot(edges: readonly Edge[]): ArchitectureSnapshot {
   const dependencies = new Map<string, ComponentDependency>();
   const fileImports = edges.map(
     (
-      { from, to, packageName, role = "source", kind = "static", line, workspace },
+      {
+        from,
+        to,
+        packageName,
+        role = "source",
+        kind = "static",
+        line,
+        workspace,
+        specifier,
+        builtIn
+      },
       index
     ): FileImport => {
       const id = `import:${index}`;
@@ -136,17 +151,19 @@ function snapshot(edges: readonly Edge[]): ArchitectureSnapshot {
       return {
         id,
         fromFileId: `${from}:${role}`,
-        specifier: packageName ? `${packageName}/subpath` : (to ?? "./missing"),
+        specifier: specifier ?? (packageName ? `${packageName}/subpath` : (to ?? "./missing")),
         kind,
         line: line ?? index + 1,
         column: 1,
-        resolution: workspace
-          ? "workspace-package"
-          : packageName
-            ? "external-package"
-            : to
-              ? "internal-file"
-              : "unresolved",
+        resolution: builtIn
+          ? "node-built-in"
+          : workspace
+            ? "workspace-package"
+            : packageName
+              ? "external-package"
+              : to
+                ? "internal-file"
+                : "unresolved",
         toComponentId: to,
         toFileId: to && !workspace ? `${to}:source` : undefined,
         externalPackage: packageName
@@ -161,7 +178,7 @@ function snapshot(edges: readonly Edge[]): ArchitectureSnapshot {
     analysisConfigHash: "b".repeat(64),
     source: { kind: "local", sourceHash: "c".repeat(64) },
     createdAt: "2026-11-21T12:00:00.000Z",
-    components,
+    components: [...list],
     files,
     fileImports,
     dependencies: [...dependencies.values()],
@@ -430,5 +447,78 @@ describe("governance evaluation", () => {
     expect(run(edited, [{ ...forbidden, id: "renamed" }]).findings[0]?.fingerprint).not.toBe(
       finding?.fingerprint
     );
+  });
+
+  it("keeps a cycle's fingerprint when it gains an internal edge, and changes it when a member joins", () => {
+    const ring: Edge[] = [
+      { from: "nested", to: "api-nested" },
+      { from: "api-nested", to: "nested" }
+    ];
+    const [before] = run(snapshot(ring), [cycles]).findings;
+    const [moreEdges] = run(snapshot([...ring, { from: "nested", to: "api-nested", line: 99 }]), [
+      cycles
+    ]).findings;
+    expect(moreEdges?.fingerprint).toBe(before?.fingerprint);
+
+    const wider = run(
+      snapshot([
+        { from: "nested", to: "child" },
+        { from: "child", to: "api-nested" },
+        { from: "api-nested", to: "nested" }
+      ]),
+      [cycles]
+    ).findings;
+    expect(wider).toHaveLength(1);
+    expect(wider[0]?.fingerprint).not.toBe(before?.fingerprint);
+  });
+
+  it("names at most five members of a cycle in its message, and keeps all of them in the subject", () => {
+    const ring = Array.from({ length: 7 }, (_, index) => ({
+      id: `lib-${index}`,
+      name: `lib-${index}`,
+      kind: "package" as const,
+      depth: 1,
+      parentId: "root",
+      paths: [`libs/lib-${index}`],
+      metrics
+    }));
+    const edges = ring.map(({ id }, index) => ({ from: id, to: ring[(index + 1) % 7]?.id ?? id }));
+    const [finding] = run(snapshot(edges, [components[0] as ArchitectureComponent, ...ring]), [
+      cycles
+    ]).findings;
+    expect(finding?.subject).toMatchObject({ componentIds: expect.arrayContaining(["lib-6"]) });
+    expect(finding?.message).toMatch(
+      /^Dependency cycle involving (?:libs\/lib-\d; ){4}libs\/lib-\d and 2 more\.$/u
+    );
+  });
+
+  it("restricts Node.js built-ins by their node: name, including subpaths, and rejects bare names", () => {
+    const restricted = {
+      id: "no-fs",
+      severity: "error",
+      type: "restricted-package",
+      packages: ["node:fs"],
+      allow: [{ name: "boundary" }]
+    };
+    const result = run(
+      snapshot([
+        { from: "nested", specifier: "node:fs", builtIn: true },
+        { from: "nested", specifier: "fs/promises", builtIn: true },
+        { from: "ui", specifier: "node:path", builtIn: true },
+        { from: "child", specifier: "node:fs", builtIn: true }
+      ]),
+      [restricted]
+    );
+    expect(result.findings).toMatchObject([
+      { subject: { componentId: "nested", packageName: "node:fs" }, evidenceTotal: 2 }
+    ]);
+
+    const bare = run(snapshot([{ from: "nested", specifier: "fs", builtIn: true }]), [
+      { ...restricted, id: "bare-fs", packages: ["fs"] }
+    ]);
+    expect(bare.findings).toEqual([]);
+    expect(bare.diagnostics).toMatchObject([
+      { ruleId: "bare-fs", code: "BUILT_IN_MODULE_NAME", field: "packages.0" }
+    ]);
   });
 });

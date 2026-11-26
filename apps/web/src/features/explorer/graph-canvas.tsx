@@ -22,7 +22,8 @@ interface Interaction {
   expandable: ReadonlySet<string>;
   expanded: ReadonlySet<string>;
   cycles: ReadonlyMap<string, "type-cycle" | "runtime-cycle">;
-  findingCounts?: ReadonlyMap<string, number>;
+  findingCounts?: ReadonlyMap<string, { count: number; severity: "error" | "warning" }>;
+  emphasized?: ReadonlySet<string>;
   focused: string | null;
   toggle(id: string): void;
   select(id: string): void;
@@ -36,21 +37,22 @@ const GraphComponent = memo(function GraphComponent({ id, data }: NodeProps<Comp
   const expanded = interaction?.expanded.has(id) ?? false;
   const cycle = interaction?.cycles.get(id);
   const findings = interaction?.findingCounts?.get(id);
+  const emphasized = interaction?.emphasized?.has(id) ?? false;
   return (
     <div
       data-testid="component-node"
       data-component-id={id}
-      className={`graph-node ${cycle ?? ""} ${data.grouped ? "group-node" : ""} ${interaction?.focused === id ? "focused-node" : ""}`}
+      className={`graph-node ${cycle ?? ""} ${data.grouped ? "group-node" : ""} ${interaction?.focused === id || emphasized ? "focused-node" : ""}`}
     >
       <Handle type="target" position={Position.Left} isConnectable={false} />
       {findings !== undefined && (
         <Badge
-          variant="destructive"
+          variant={findings.severity === "error" ? "destructive" : "secondary"}
           className="pointer-events-none absolute right-0 -top-2 z-10"
-          aria-label={`${findings} ${findings === 1 ? "finding" : "findings"}`}
+          aria-label={`${findings.count} ${findings.count === 1 ? "finding" : "findings"}, highest severity ${findings.severity}`}
           data-testid="finding-count"
         >
-          {findings}
+          {findings.count}
         </Badge>
       )}
       <div className="flex items-start gap-2 p-2.5">

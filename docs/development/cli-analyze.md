@@ -67,7 +67,7 @@ Analyze the repository and evaluate its rules:
 pnpm archmind check . --format summary --fail-on error
 ```
 
-Without `--snapshot`, `check` writes `archmind.snapshot.json` in the working directory. By default it writes the evaluation next to the snapshot by appending `.evaluation.json` to its full filename. `--out <evaluation.json>` overrides the evaluation path. `--format summary` prints counts by severity and rule, baseline comparison when requested, and snapshot analysis coverage. The default `--format evaluation` writes the document without a summary.
+Without `--snapshot`, `check` writes `archmind.snapshot.json` in the working directory. By default it writes the evaluation next to the snapshot by appending `.evaluation.json` to its full filename. `--out <evaluation.json>` overrides the evaluation path. `--format summary` prints counts by severity and rule, the findings that decide the exit code (up to 20, each with its first import location), the baseline comparison when requested, and snapshot analysis coverage. The default `--format evaluation` writes the document and prints nothing to stdout; when the exit code is `1` it writes one line to stderr with the number of findings and a reminder to use `--format summary`.
 
 To apply current rules to an existing snapshot without re-analyzing:
 
@@ -76,7 +76,7 @@ pnpm archmind check . --snapshot ./tmp/snapshot.json \
   --baseline ./tmp/baseline.evaluation.json --new-only --format summary
 ```
 
-The repository path selects the config; it defaults to the working directory when `--snapshot` is supplied. Snapshot reuse verifies the schema version and `contentHash`. Changes to `analysis` produce a warning; the check still uses the stored graph and metrics. Rules come from the current config. `--new-only` requires `--baseline` and filters the exit-code decision, not the evaluation JSON or summary totals.
+The repository path selects the config; it defaults to the working directory when `--snapshot` is supplied. Snapshot reuse verifies the schema version and `contentHash`. Changes to `analysis` produce a warning; the check still uses the stored graph and metrics. Rules come from the current config. `--new-only` requires `--baseline` and filters the exit-code decision and the listed findings, not the evaluation JSON or summary totals. The comparison reports `rules changed`, `hierarchy changed` and `engine changed`, because a baseline from another governance engine version can differ in built-in rules that `rulesHash` doesn't cover. A baseline whose findings share no component with the current ones triggers a stderr warning that it may belong to another project; the check still runs.
 
 | Code | Meaning                                                                                                    |
 | ---- | ---------------------------------------------------------------------------------------------------------- |
@@ -88,4 +88,4 @@ The CLI writes the evaluation before reporting violations or rule diagnostics. U
 
 The CLI governance fixtures are analyzer inputs, not Vitest suites. Vitest skips `fixtures/` directories, so test-role inputs can keep their `.test.ts` filenames.
 
-To browse findings, place the snapshot and its evaluation in the explorer's snapshot directory, then select the evaluation under **Governance findings**. Optionally select a baseline snapshot and evaluation to filter by finding status. Graph badges count findings on visible components and their collapsed descendants. **Show on graph** opens the subject with the recorded rule scope. If an older evaluation does not record scope, rerun `archmind check --snapshot <snapshot.json>` to enable that jump.
+To browse findings, place the snapshot and its evaluation in the explorer's snapshot directory, then select the evaluation under **Governance findings**. Each choice shows the finding count, a short rules hash and the engine version. Rules that were not evaluated (for example a selector that matches nothing) are listed above the findings. Optionally select a baseline evaluation, from this snapshot or from another one, to filter by finding status. The explorer rejects an evaluation whose findings refer to components or files that its snapshot does not have, and lists it with the reason. Graph badges count the findings that match the list filters on visible components and their collapsed descendants, and are red when any of them is an error. Resolved findings have no badge. **Show on graph** opens the subject with the recorded rule scope and draws the reported dependency, or the dependencies of a cycle, as a thick line. If an older evaluation does not record scope, rerun `archmind check --snapshot <snapshot.json>` to enable that jump.

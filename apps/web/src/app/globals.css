@@ -85,6 +85,10 @@
   stroke-width: 2;
   stroke-dasharray: 6 4;
 }
+.react-flow__edge.finding-edge .react-flow__edge-path {
+  stroke: var(--color-ring);
+  stroke-width: 4;
+}
 .react-flow__edge.external .react-flow__edge-path {
   stroke: var(--color-muted-foreground);
   stroke-dasharray: 2 4;

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { builtinModules } from "node:module";
 
 import {
   enabledDefaultRuleIds,
@@ -21,6 +22,7 @@ import {
   findVisibleAncestor,
   type ArchitectureComponent,
   type ArchitectureSnapshot,
+  type FileImport,
   type ProjectedGraph,
   type ProjectGraphFilters
 } from "@archmind/domain";
@@ -29,7 +31,9 @@ import { collectCycleSupport } from "./cycle-findings.js";
 import { defaultRules } from "./defaults.js";
 import { createSelectorIndex } from "./selectors.js";
 
-export const GOVERNANCE_ENGINE_VERSION = "0.1.0";
+export const GOVERNANCE_ENGINE_VERSION = "0.2.0";
+const MESSAGE_MEMBER_LIMIT = 5;
+const NODE_PREFIX = "node:";
 
 type GraphRule = Exclude<RuleDefinition, { type: "threshold" }>;
 
@@ -147,8 +151,7 @@ export function evaluate(
     const addFinding = (
       subject: FindingSubject,
       message: string,
-      importIds: Iterable<string> = [],
-      endpoints: readonly [string, string][] = []
+      importIds: Iterable<string> = []
     ) => {
       const evidence = readEvidence(importIds);
       findings.push({
@@ -166,13 +169,7 @@ export function evaluate(
         message,
         evidence: evidence.slice(0, FINDING_EVIDENCE_LIMIT),
         evidenceTotal: evidence.length,
-        fingerprint: hash([
-          rule.id,
-          subjectKey(subject),
-          endpoints
-            .map(([from, to]) => canonicalJson([keyOf(from), keyOf(to)]))
-            .sort(compareStrings)
-        ])
+        fingerprint: hash([rule.id, subjectKey(subject)])
       });
     };
 
@@ -256,31 +253,54 @@ export function evaluate(
       }
       case "restricted-package": {
         const allowed = selectors.withDescendants(select(rule.allow, "allow"));
+        for (const [index, name] of rule.packages.entries()) {
+          if (builtinModules.includes(name)) {
+            diagnostics.push({
+              ruleId: rule.id,
+              code: "BUILT_IN_MODULE_NAME",
+              field: `packages.${index}`,
+              message: `"${name}" is a Node.js built-in module. Use "node:${name}" to restrict it.`
+            });
+          }
+        }
         if (!valid()) {
           break;
         }
         const packages = new Set(rule.packages);
+        const builtins = rule.packages.filter((name) => name.startsWith(NODE_PREFIX));
+        const restrictedName = (item: FileImport): string | undefined => {
+          if (item.resolution === "external-package") {
+            return item.externalPackage !== undefined && packages.has(item.externalPackage)
+              ? item.externalPackage
+              : undefined;
+          }
+          if (item.resolution !== "node-built-in") {
+            return undefined;
+          }
+          const specifier = item.specifier.replace(/^node:/u, "");
+          return builtins.find((name) => {
+            const module = name.slice(NODE_PREFIX.length);
+            return specifier === module || specifier.startsWith(`${module}/`);
+          });
+        };
         const includeImport = createImportFilter(filtersFor(rule.scope));
         const violations = new Map<
           string,
           { componentId: string; packageName: string; imports: string[] }
         >();
         for (const item of snapshot.fileImports) {
-          if (
-            item.resolution !== "external-package" ||
-            item.externalPackage === undefined ||
-            !packages.has(item.externalPackage)
-          ) {
+          const packageName = restrictedName(item);
+          if (packageName === undefined) {
             continue;
           }
           const file = filesById.get(item.fromFileId);
           if (!file || allowed.has(file.componentId) || !includeImport(item, file)) {
             continue;
           }
-          const key = canonicalJson([file.componentId, item.externalPackage]);
+          const key = canonicalJson([file.componentId, packageName]);
           const group = violations.get(key) ?? {
             componentId: file.componentId,
-            packageName: item.externalPackage,
+            packageName,
             imports: []
           };
           group.imports.push(item.id);
@@ -312,11 +332,12 @@ export function evaluate(
             includeTypeOnlyCycles: rule.includeTypeOnlyCycles
           }
         )) {
+          const shown = cycle.memberIds.slice(0, MESSAGE_MEMBER_LIMIT).map(name).join("; ");
+          const hidden = cycle.memberIds.length - MESSAGE_MEMBER_LIMIT;
           addFinding(
             { kind: "components", componentIds: cycle.memberIds },
-            `Dependency cycle involving ${cycle.memberIds.map(name).join("; ")}.`,
-            cycle.imports,
-            cycle.endpoints
+            `Dependency cycle involving ${shown}${hidden > 0 ? ` and ${hidden} more` : ""}.`,
+            cycle.imports
           );
         }
         break;

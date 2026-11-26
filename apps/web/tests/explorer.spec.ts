@@ -275,20 +275,31 @@ test("hides components without files in the selected roles until asked", async (
   await expect(page.getByRole("button", { name: /fixtures \/ packages\/fixtures/ })).toBeVisible();
 });
 
-test("jumps from a collapsed finding to its subject and evidence", async ({ page }) => {
+async function openEvaluation(page: Page, name: RegExp) {
   await page.goto("/");
   await page.getByRole("combobox", { name: "Snapshot", exact: true }).click();
   await page.getByRole("option", { name: "governance.json", exact: true }).click();
   await page.getByRole("combobox", { name: "Evaluation", exact: true }).click();
-  await page.getByRole("option", { name: "governance.evaluation.json", exact: true }).click();
-  await page.getByRole("combobox", { name: "Baseline snapshot", exact: true }).click();
-  await page.getByRole("option", { name: "governance.json", exact: true }).click();
-  await page.getByRole("combobox", { name: "Baseline evaluation", exact: true }).click();
-  await page.getByRole("option", { name: "governance-base.evaluation.json", exact: true }).click();
-  await page.getByRole("combobox", { name: "Status", exact: true }).click();
-  await page.getByRole("option", { name: "new", exact: true }).click();
+  await page.getByRole("option", { name }).click();
+}
+
+test("jumps from a collapsed finding to its subject and evidence", async ({ page }) => {
+  await openEvaluation(page, /^governance\.evaluation\.json · 7 findings · rules \w{8} · engine /);
   const graph = page.getByRole("region", { name: "Architecture graph" });
   await expect(graph.getByTestId("finding-count")).toHaveText("7");
+  await expect(graph.getByTestId("finding-count")).toHaveAttribute(
+    "aria-label",
+    /highest severity error/
+  );
+  await page.getByRole("combobox", { name: "Baseline evaluation", exact: true }).click();
+  await page.getByRole("option", { name: /^governance-base\.evaluation\.json/ }).click();
+  await page.getByRole("combobox", { name: "Status", exact: true }).click();
+  await page.getByRole("option", { name: "new", exact: true }).click();
+  await expect(graph.getByTestId("finding-count")).toHaveText("1");
+  await expect(graph.getByTestId("finding-count")).toHaveAttribute(
+    "aria-label",
+    /highest severity warning/
+  );
   await expect(graph.getByRole("button", { name: "Details for test-a", exact: true })).toHaveCount(
     0
   );
@@ -311,6 +322,37 @@ test("jumps from a collapsed finding to its subject and evidence", async ({ page
   await expect(
     page.getByRole("checkbox", { name: "Show components without files in these roles" })
   ).toBeChecked();
+});
+
+test("shows the offending dependency of a finding on the graph", async ({ page }) => {
+  await openEvaluation(page, /^governance\.evaluation\.json/);
+  const graph = page.getByRole("region", { name: "Architecture graph" });
+  await page.getByRole("button", { name: /forbid-data-to-ui: Forbidden dependency/ }).click();
+  await expect(graph.locator(".react-flow__edge.finding-edge")).toHaveCount(0);
+  await page.getByRole("button", { name: "Show on graph" }).click();
+  const reported = graph.locator(".react-flow__edge.finding-edge");
+  await expect(reported).toHaveCount(1);
+  await expect(reported).toHaveAttribute(
+    "aria-label",
+    /^data depends on ui; .*reported by the selected finding$/
+  );
+});
+
+test("explains rules that were not evaluated and baselines from another project", async ({
+  page
+}) => {
+  await openEvaluation(page, /^governance-diagnostics\.evaluation\.json/);
+  const problems = page.getByRole("alert", { name: "Rule diagnostics" });
+  await expect(problems).toContainText("the affected rules were not evaluated");
+  await expect(problems).toContainText("typo-selector (from.0): No component matched selector");
+
+  await page.getByRole("combobox", { name: "Baseline snapshot", exact: true }).click();
+  await page.getByRole("option", { name: "performance.json", exact: true }).click();
+  await page.getByRole("combobox", { name: "Baseline evaluation", exact: true }).click();
+  await page.getByRole("option", { name: /^performance\.evaluation\.json/ }).click();
+  await expect(
+    page.getByText("The baseline shares no component with this evaluation.")
+  ).toBeVisible();
 });
 
 test("measures first paint and expand/collapse for the 300-component fixture", async ({ page }) => {
@@ -344,7 +386,9 @@ test("measures first paint and expand/collapse for the 300-component fixture", a
   };
   await measure("First render", () => select.click(), 299, 2000);
   await page.getByRole("combobox", { name: "Evaluation", exact: true }).click();
-  await page.getByRole("option", { name: "performance.evaluation.json", exact: true }).click();
+  await page
+    .getByRole("option", { name: /^performance\.evaluation\.json · 3299 findings/ })
+    .click();
   await expect(graph.getByTestId("finding-count")).toHaveCount(298);
   await expect(
     graph
@@ -353,7 +397,7 @@ test("measures first paint and expand/collapse for the 300-component fixture", a
         has: page.getByRole("button", { name: "Details for component-0", exact: true })
       })
       .getByTestId("finding-count")
-  ).toHaveText("2");
+  ).toHaveText("42");
   await measure(
     "Expand",
     () => graph.getByRole("button", { name: "Expand component-0", exact: true }).click(),

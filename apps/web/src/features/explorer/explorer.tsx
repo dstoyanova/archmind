@@ -1,8 +1,10 @@
 "use client";
 
 import {
+  findingComponentIds,
   MAX_PROJECTION_EXPANSIONS,
   type ComponentGraph,
+  type FindingHighlights,
   type FindingSummary,
   type SnapshotList
 } from "@archmind/contracts";
@@ -26,8 +28,8 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fetchGraph, fetchSnapshots } from "./api";
-import { graphEdges } from "./edges";
-import { findingComponents, FindingsPanel, type ReadySnapshot } from "./findings-panel";
+import { graphEdges, type FindingEmphasis } from "./edges";
+import { FindingsPanel, type ReadySnapshot } from "./findings-panel";
 import { componentLabels } from "./labels";
 import { ComponentPanel } from "./component-panel";
 import { SnapshotOverviewPanel } from "./snapshot-overview";
@@ -50,7 +52,11 @@ const roles = ["source", "test", "story", "script", "config"] as const;
 function fetchFullGraph(id: string, signal: AbortSignal) {
   return fetchGraph(
     id,
-    new URLSearchParams({ depth: String(Number.MAX_SAFE_INTEGER), includeEmptyComponents: "true" }),
+    new URLSearchParams({
+      depth: String(Number.MAX_SAFE_INTEGER),
+      includeEmptyComponents: "true",
+      includeDependencies: "false"
+    }),
     signal
   );
 }
@@ -60,14 +66,34 @@ type FindingJump = {
   scope: NonNullable<FindingSummary["graphScope"]>;
   expanded: ReadonlySet<string>;
   focus: string | null;
+  emphasis: FindingEmphasis;
 };
+type Highlights = FindingHighlights["items"];
+class ExpansionLimitError extends Error {}
 type Listing = SnapshotList | { error: string };
 const preferredSnapshotId = ({ items }: SnapshotList) =>
   (items.find((item) => item.status === "ready") ?? items[0])?.id;
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "Something went wrong.";
 
-function planFindingJump(
+function emphasisOf({ subject }: FindingSummary): FindingEmphasis {
+  switch (subject.kind) {
+    case "components":
+      return { components: subject.componentIds };
+    case "dependency":
+      return {
+        components: [subject.fromComponentId, subject.toComponentId],
+        edge: [subject.fromComponentId, subject.toComponentId]
+      };
+    case "external-package":
+      return {
+        components: [subject.componentId],
+        external: [subject.componentId, subject.packageName]
+      };
+  }
+}
+
+function buildFindingJump(
   finding: FindingSummary,
   index: ReadonlyMap<string, Component>,
   expanded: ReadonlySet<string>
@@ -76,7 +102,7 @@ function planFindingJump(
     throw new Error(
       "This evaluation does not record graph scope. Run archmind check again to enable graph navigation."
     );
-  const subjects = findingComponents(finding);
+  const subjects = findingComponentIds(finding.subject);
   const next = new Set(expanded);
   for (const id of subjects) {
     const component = index.get(id);
@@ -88,8 +114,29 @@ function planFindingJump(
     }
   }
   if (next.size > MAX_PROJECTION_EXPANSIONS)
-    throw new Error("Collapse some graph components before jumping to this finding.");
-  return { scope: finding.graphScope, expanded: next, focus: subjects[0] ?? null };
+    throw new ExpansionLimitError(
+      `Showing this finding needs more than ${MAX_PROJECTION_EXPANSIONS} expanded components.`
+    );
+  return {
+    scope: finding.graphScope,
+    expanded: next,
+    focus: subjects[0] ?? null,
+    emphasis: emphasisOf(finding)
+  };
+}
+
+// Keeps the current expansion when it fits, and otherwise shows only what the finding needs.
+function planFindingJump(
+  finding: FindingSummary,
+  index: ReadonlyMap<string, Component>,
+  expanded: ReadonlySet<string>
+): FindingJump {
+  try {
+    return buildFindingJump(finding, index, expanded);
+  } catch (error) {
+    if (!(error instanceof ExpansionLimitError)) throw error;
+    return buildFindingJump(finding, index, new Set());
+  }
 }
 
 function focusGraph() {
@@ -302,7 +349,8 @@ function SnapshotGraph({
   const [detailId, setDetailId] = useState<string>();
   const [showFiles, setShowFiles] = useState(false);
   const [showList, setShowList] = useState(false);
-  const [findings, setFindings] = useState<FindingSummary[]>([]);
+  const [findings, setFindings] = useState<Highlights>([]);
+  const [emphasis, setEmphasis] = useState<FindingEmphasis | undefined>(initialJump?.emphasis);
   const [scopedCatalog, setScopedCatalog] = useState<{ query: string; components: Component[] }>();
   const [fullCatalog, setFullCatalog] = useState<Component[]>();
   const [catalogError, setCatalogError] = useState<string>();
@@ -399,11 +447,11 @@ function SnapshotGraph({
   );
   const findingCounts = useMemo(() => {
     const visibleIds = new Set(visible?.map(({ id }) => id));
-    const counts = new Map<string, number>();
+    const counts = new Map<string, { count: number; severity: "error" | "warning" }>();
     const nearest = new Map<string, string | undefined>();
-    for (const finding of findings) {
+    for (const { componentIds, severity } of findings) {
       const targets = new Set<string>();
-      for (const id of findingComponents(finding)) {
+      for (const id of componentIds) {
         if (!nearest.has(id)) {
           let candidate: string | undefined = id;
           while (candidate && !visibleIds.has(candidate))
@@ -413,7 +461,13 @@ function SnapshotGraph({
         const target = nearest.get(id);
         if (target) targets.add(target);
       }
-      for (const target of targets) counts.set(target, (counts.get(target) ?? 0) + 1);
+      for (const target of targets) {
+        const entry = counts.get(target) ?? { count: 0, severity: "warning" as const };
+        counts.set(target, {
+          count: entry.count + 1,
+          severity: entry.severity === "error" || severity === "error" ? "error" : "warning"
+        });
+      }
     }
     return counts;
   }, [componentIndex, findings, visible]);
@@ -435,11 +489,14 @@ function SnapshotGraph({
   const edgeView = useMemo(() => {
     if (!result) return { edges: [], cycles: new Map<string, "type-cycle" | "runtime-cycle">() };
     return {
-      edges: graphEdges({
-        ...result.graph,
-        dependencies: internal ? result.graph.dependencies : [],
-        externalDependencies: external ? result.graph.externalDependencies : []
-      }),
+      edges: graphEdges(
+        {
+          ...result.graph,
+          dependencies: internal ? result.graph.dependencies : [],
+          externalDependencies: external ? result.graph.externalDependencies : []
+        },
+        emphasis
+      ),
       cycles: new Map(
         internal
           ? result.graph.cycles.flatMap(({ memberIds, typeOnly: types }) =>
@@ -451,7 +508,7 @@ function SnapshotGraph({
           : []
       )
     };
-  }, [result, internal, external]);
+  }, [result, internal, external, emphasis]);
 
   function reveal(component: Component) {
     const next = new Set(expanded);
@@ -513,7 +570,10 @@ function SnapshotGraph({
         return;
       }
       let index = componentIndex;
-      if (!fullCatalog && !findingComponents(finding).every((subject) => index.has(subject))) {
+      if (
+        !fullCatalog &&
+        !findingComponentIds(finding.subject).every((subject) => index.has(subject))
+      ) {
         const graph = await fetchFullGraph(id, AbortSignal.timeout(10_000));
         index = new Map(graph.components.map((component) => [component.id, component]));
         setFullCatalog(graph.components);
@@ -527,6 +587,7 @@ function SnapshotGraph({
       setInternal(true);
       setExternal(true);
       setFocused(plan.focus);
+      setEmphasis(plan.emphasis);
       setShowList(false);
       setShowFiles(false);
       focusGraph();
@@ -720,6 +781,7 @@ function SnapshotGraph({
                   expanded,
                   cycles: edgeView.cycles,
                   findingCounts,
+                  emphasized: new Set(emphasis?.components),
                   focused,
                   toggle,
                   select: setDetailId

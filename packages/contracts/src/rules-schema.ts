@@ -54,7 +54,10 @@ const baseRule = {
 };
 
 const layerSchema = z.object({ name: label, components: nonEmptySelectorSet }).strict();
-const packageName = label.regex(/^(?:@[\w.-]+\/)?[\w.-]+$/u, "Expected an exact package name.");
+const packageName = label.regex(
+  /^(?:node:\w+(?:\/\w+)*|(?:@[\w.-]+\/)?[\w.-]+)$/u,
+  'Expected an exact package name, or a Node.js built-in module such as "node:fs".'
+);
 
 const ruleDefinitionSchema = z.discriminatedUnion("type", [
   z

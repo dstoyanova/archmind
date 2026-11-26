@@ -96,6 +96,10 @@ describe("explorer queries", () => {
     });
     expect(toProjectGraphOptions(evidence)).toEqual(toProjectGraphOptions(graph));
     expect(evidence).toMatchObject({ from: "a", to: "b", cursor: "opaque", limit: 5 });
+    expect(graph.includeDependencies).toBe(true);
+    expect(graphQuerySchema.parse({ includeDependencies: "false" }).includeDependencies).toBe(
+      false
+    );
   });
 
   it.each([
@@ -229,7 +233,7 @@ describe("explorer OpenAPI", () => {
     const graph = document.paths?.[`${base}/{id}/graph`]?.get;
     const evidence = document.paths?.[`${base}/{id}/dependencies`]?.get;
 
-    expect(Object.keys(document.paths ?? {})).toHaveLength(12);
+    expect(Object.keys(document.paths ?? {})).toHaveLength(13);
     const workspace = "/api/workspaces/{workspaceId}";
     expect(document.paths).toMatchObject({
       [`${base}/{id}/evaluations`]: { get: { operationId: "listEvaluations" } },
@@ -237,6 +241,9 @@ describe("explorer OpenAPI", () => {
       [`${workspace}/evaluations/{id}/findings`]: { get: { operationId: "listFindings" } },
       [`${workspace}/evaluations/{id}/findings/{findingId}`]: {
         get: { operationId: "getFinding" }
+      },
+      [`${workspace}/evaluations/{id}/highlights`]: {
+        get: { operationId: "getFindingHighlights" }
       },
       [`${workspace}/evaluations/{id}/health`]: { get: { operationId: "getEvaluationHealth" } }
     });

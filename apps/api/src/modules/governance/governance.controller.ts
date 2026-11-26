@@ -2,6 +2,7 @@ import {
   baselineQuerySchema,
   findingParamsSchema,
   findingsQuerySchema,
+  highlightsQuerySchema,
   pageQuerySchema,
   snapshotParamsSchema,
   type FindingsQuery,
@@ -17,6 +18,7 @@ const params = new ZodValidationPipe(createZodDto(snapshotParamsSchema));
 const findingParams = new ZodValidationPipe(createZodDto(findingParamsSchema));
 const page = new ZodValidationPipe(createZodDto(pageQuerySchema));
 const findings = new ZodValidationPipe(createZodDto(findingsQuerySchema));
+const highlights = new ZodValidationPipe(createZodDto(highlightsQuerySchema));
 const baseline = new ZodValidationPipe(createZodDto(baselineQuerySchema));
 
 @Controller("api/workspaces/:workspaceId")
@@ -43,6 +45,14 @@ export class GovernanceController {
     @Query(findings) query: FindingsQuery
   ): ReturnType<GovernanceService["findings"]> {
     return this.service.findings(id, query);
+  }
+
+  @Get("evaluations/:id/highlights")
+  highlights(
+    @Param(params) { id }: { id: string },
+    @Query(highlights) query: Omit<FindingsQuery, "cursor" | "limit">
+  ): ReturnType<GovernanceService["highlights"]> {
+    return this.service.highlights(id, query);
   }
 
   @Get("evaluations/:id/findings/:findingId")

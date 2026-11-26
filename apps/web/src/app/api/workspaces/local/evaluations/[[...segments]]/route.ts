@@ -10,7 +10,8 @@ export async function GET(
   const evaluations =
     opaque(id) &&
     (segments.length === 1 ||
-      (segments.length === 2 && (resource === "findings" || resource === "health")) ||
+      (segments.length === 2 &&
+        (resource === "findings" || resource === "health" || resource === "highlights")) ||
       (segments.length === 3 && resource === "findings" && opaque(finding)));
   if (!evaluations) {
     return Response.json(

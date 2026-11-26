@@ -1,6 +1,11 @@
 "use client";
 
-import type { FindingSummary, SnapshotList } from "@archmind/contracts";
+import type {
+  EvaluationList,
+  FindingHighlights,
+  FindingSummary,
+  SnapshotList
+} from "@archmind/contracts";
 import { useCallback, useEffect, useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -14,7 +19,15 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
-import { fetchEvaluations, fetchFinding, fetchFindings, fetchHealth, fetchSnapshots } from "./api";
+import {
+  fetchEvaluation,
+  fetchEvaluations,
+  fetchFinding,
+  fetchFindings,
+  fetchHealth,
+  fetchHighlights,
+  fetchSnapshots
+} from "./api";
 import { diagnosticEffects } from "./coverage";
 import { LoadContent, LoadPage } from "./detail-content";
 
@@ -33,16 +46,13 @@ async function evaluationOptions(id: string, signal: AbortSignal) {
   return { items, issues: first.issues };
 }
 
-export function findingComponents({ subject }: FindingSummary): string[] {
-  switch (subject.kind) {
-    case "components":
-      return subject.componentIds;
-    case "dependency":
-      return [subject.fromComponentId, subject.toComponentId];
-    case "external-package":
-      return [subject.componentId];
-  }
-}
+const describeEvaluation = ({
+  label,
+  findingCount,
+  rulesHash,
+  governanceEngineVersion
+}: EvaluationList["items"][number]) =>
+  `${label} · ${findingCount} ${findingCount === 1 ? "finding" : "findings"} · rules ${rulesHash.slice(0, 8)} · engine ${governanceEngineVersion}`;
 
 function Choice({
   label,
@@ -85,7 +95,7 @@ export function FindingsPanel({
 }: {
   snapshotId: string;
   labels: ReadonlyMap<string, string>;
-  onHighlight: (findings: FindingSummary[]) => void;
+  onHighlight: (highlights: FindingHighlights["items"]) => void;
   onJump: (finding: FindingSummary, target?: ReadySnapshot) => Promise<string | undefined>;
 }) {
   const [selected, select] = useState("");
@@ -113,23 +123,7 @@ export function FindingsPanel({
   }, []);
 
   useEffect(() => {
-    onHighlight([]);
-    if (!selected) return;
-    const controller = new AbortController();
-    void (async () => {
-      const items: FindingSummary[] = [];
-      let cursor: string | null = null;
-      do {
-        const page = await fetchFindings(selected, "", cursor, controller.signal);
-        items.push(...page.items);
-        cursor = page.nextCursor;
-      } while (cursor);
-      if (!controller.signal.aborted) onHighlight(items);
-    })().catch((reason: unknown) => {
-      if (!controller.signal.aborted)
-        setJumpError(reason instanceof Error ? reason.message : "Could not load graph highlights.");
-    });
-    return () => controller.abort();
+    if (!selected) onHighlight([]);
   }, [selected, onHighlight]);
 
   return (
@@ -163,7 +157,7 @@ export function FindingsPanel({
                   value={selected}
                   options={[
                     { value: "", label: "Select an evaluation" },
-                    ...items.map(({ id, label }) => ({ value: id, label }))
+                    ...items.map((item) => ({ value: item.id, label: describeEvaluation(item) }))
                   ]}
                   onChange={(value) => {
                     select(value);
@@ -185,8 +179,10 @@ export function FindingsPanel({
                     label="Baseline snapshot"
                     value={baselineSnapshot?.id ?? ""}
                     options={[
-                      { value: "", label: "No baseline snapshot" },
-                      ...snapshots.map(({ id, label }) => ({ value: id, label }))
+                      { value: "", label: "This snapshot" },
+                      ...snapshots
+                        .filter(({ id }) => id !== snapshotId)
+                        .map(({ id, label }) => ({ value: id, label }))
                     ]}
                     onChange={(value) => {
                       setBaselineSnapshot(snapshots.find(({ id }) => id === value));
@@ -196,32 +192,31 @@ export function FindingsPanel({
                   />
                 )}
               </LoadContent>
-              {baselineSnapshot && (
-                <LoadContent key={baselineSnapshot.id} load={loadBaselineEvaluations}>
-                  {({ items }) => (
-                    <Choice
-                      label="Baseline evaluation"
-                      value={baseline}
-                      options={[
-                        { value: "", label: "No baseline evaluation" },
-                        ...items
-                          .filter(({ id }) => id !== selected)
-                          .map(({ id, label }) => ({ value: id, label }))
-                      ]}
-                      onChange={(value) => {
-                        setBaseline(value);
-                        setFindings(undefined);
-                      }}
-                    />
-                  )}
-                </LoadContent>
-              )}
+              <LoadContent key={baselineSnapshot?.id ?? snapshotId} load={loadBaselineEvaluations}>
+                {({ items }) => (
+                  <Choice
+                    label="Baseline evaluation"
+                    value={baseline}
+                    options={[
+                      { value: "", label: "No baseline evaluation" },
+                      ...items
+                        .filter(({ id }) => id !== selected)
+                        .map((item) => ({ value: item.id, label: describeEvaluation(item) }))
+                    ]}
+                    onChange={(value) => {
+                      setBaseline(value);
+                      setFindings(undefined);
+                    }}
+                  />
+                )}
+              </LoadContent>
             </div>
             <EvaluationFindings
               key={`${selected}:${baseline}`}
               id={selected}
               baseline={baseline}
               labels={labels}
+              onHighlight={onHighlight}
               onSelect={(finding) => {
                 setFindings(finding);
                 setJumpError(undefined);
@@ -255,16 +250,20 @@ function EvaluationFindings({
   id,
   baseline,
   labels,
+  onHighlight,
   onSelect
 }: {
   id: string;
   baseline: string;
   labels: ReadonlyMap<string, string>;
+  onHighlight: (highlights: FindingHighlights["items"]) => void;
   onSelect: (finding: FindingSummary) => void;
 }) {
   const [severity, setSeverity] = useState("");
   const [rule, setRule] = useState("");
   const [status, setStatus] = useState("");
+  const [highlightNotice, setHighlightNotice] = useState<string>();
+  const loadDetail = useCallback((signal: AbortSignal) => fetchEvaluation(id, signal), [id]);
   const loadHealth = useCallback(
     (signal: AbortSignal) => fetchHealth(id, baseline, signal),
     [id, baseline]
@@ -282,8 +281,55 @@ function EvaluationFindings({
     (signal: AbortSignal) => fetchHealth(baseline, "", signal),
     [baseline]
   );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setHighlightNotice(undefined);
+    void fetchHighlights(id, filters, controller.signal).then(
+      ({ total, items }) => {
+        if (controller.signal.aborted) return;
+        onHighlight(items);
+        if (total > items.length)
+          setHighlightNotice(`Graph badges cover the first ${items.length} of ${total} findings.`);
+      },
+      (reason: unknown) => {
+        if (!controller.signal.aborted)
+          setHighlightNotice(
+            reason instanceof Error ? reason.message : "Could not load graph highlights."
+          );
+      }
+    );
+    return () => controller.abort();
+  }, [id, filters, onHighlight]);
+  useEffect(() => () => onHighlight([]), [onHighlight]);
+
   return (
     <section aria-label="Findings and health" className="space-y-3">
+      <LoadContent load={loadDetail}>
+        {({ diagnostics }) =>
+          diagnostics.length > 0 && (
+            <Alert variant="destructive" aria-label="Rule diagnostics">
+              <AlertDescription>
+                <p className="font-medium">
+                  {diagnostics.length} rule {diagnostics.length === 1 ? "problem" : "problems"}: the
+                  affected rules were not evaluated.
+                </p>
+                {diagnostics.map(({ ruleId, field, code, message }) => (
+                  <p key={`${ruleId}:${field ?? ""}:${code}:${message}`}>
+                    {ruleId}
+                    {field ? ` (${field})` : ""}: {message}
+                  </p>
+                ))}
+              </AlertDescription>
+            </Alert>
+          )
+        }
+      </LoadContent>
+      {highlightNotice && (
+        <Alert>
+          <AlertDescription>{highlightNotice}</AlertDescription>
+        </Alert>
+      )}
       <LoadContent load={loadHealth}>
         {(health) => (
           <>
@@ -314,7 +360,16 @@ function EvaluationFindings({
                   {health.comparison.newCount} new · {health.comparison.resolvedCount} resolved
                   {health.comparison.rulesChanged ? " · Rules changed" : ""}
                   {health.comparison.hierarchyChanged ? " · Hierarchy changed" : ""}
+                  {health.comparison.engineChanged ? " · Engine changed" : ""}
                 </p>
+              )}
+              {health.comparison?.unrelatedBaseline && (
+                <Alert>
+                  <AlertDescription>
+                    The baseline shares no component with this evaluation. Check that it belongs to
+                    this project.
+                  </AlertDescription>
+                </Alert>
               )}
               <h4 className="font-medium">Analysis coverage</h4>
               <p>

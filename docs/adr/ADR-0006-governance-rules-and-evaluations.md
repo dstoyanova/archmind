@@ -47,3 +47,17 @@ Define the rule configuration and evaluation contract, including how selectors a
 - Policy changes and governance engine upgrades can reuse an existing snapshot. Invalid governance configuration cannot block or invalidate analysis.
 - Hierarchy changes can change the scope of rules and subjects of findings; the baseline comparison exposes that separately from rule changes.
 - Graph coverage limits still apply. An import resolved only to a workspace package cannot be checked against a selector for a folder inside that package. Unresolved and excluded imports are not checked.
+
+## Amendments
+
+Amendments are added after implementation review ([M3 code review](../code-reviews/m3-code-review.md)). The decisions above stay as written. Where an amendment differs, the amendment applies.
+
+### 2026-11-26
+
+- **Cycle fingerprints (G1).** A cycle finding's fingerprint is the rule ID and the sorted stable keys of its member components, and nothing else. The internal dependency endpoints are not part of it, so an extra or removed edge between existing members keeps the finding `existing`. A cycle that gains or loses a member is a different finding. Evidence still covers every import that supports the cycle.
+- **Engine versions in comparisons (G3).** A comparison also flags `engineChanged` when the two evaluations record different `governanceEngineVersion` values, because built-in rule definitions are not part of `rulesHash`. The explorer API reads evaluations of any engine version whose document schema is supported, and the CLI accepts them as baselines; `schemaVersion` alone decides whether a document can be read. The engine version is now `0.2.0` for this amendment.
+- **Node.js built-ins (G5).** `restricted-package` can name a built-in module as `node:<module>`, such as `node:fs` or `node:fs/promises`. A name matches imports of that module and its subpaths, with or without the `node:` prefix in the source. A bare built-in name (`fs`) is a rule diagnostic, because such an import is never an external package.
+- **Cycle messages (G11).** A cycle message names at most five members and counts the rest. The subject keeps all member IDs.
+- **Validation against the snapshot (G7).** A tool that reads an evaluation for a snapshot rejects it when a finding refers to a component or file that the snapshot does not have, or when the `analysisConfigHash` values differ. Fingerprints are not recomputed.
+- **Baseline plausibility (G8).** When both evaluations have findings but no component in common, a comparison is flagged `unrelatedBaseline`. This is a hint for a baseline from another project, not an error.
+- **Default coupling rule.** Whether `archmind/high-coupling` should apply at every depth, or only to leaf components, is decided by the M3.6 calibration, which also records the number of nested duplicate findings.

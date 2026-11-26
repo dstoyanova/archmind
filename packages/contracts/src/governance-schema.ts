@@ -16,6 +16,7 @@ import { ruleSeveritySchema } from "./rules-schema.js";
 const id = z.string().min(1);
 const count = z.number().int().nonnegative();
 export const findingParamsSchema = snapshotParamsSchema.extend({ findingId: id });
+export const MAX_FINDING_HIGHLIGHTS = 10_000;
 export const baselineQuerySchema = z.object({ baseline: id.optional() }).strict();
 export const findingStatusSchema = z.enum(["new", "existing", "resolved"]);
 export const findingsQuerySchema = pageQuerySchema.extend({
@@ -25,20 +26,30 @@ export const findingsQuerySchema = pageQuerySchema.extend({
   ruleId: id.optional()
 });
 
+export const highlightsQuerySchema = findingsQuerySchema.omit({ cursor: true, limit: true });
+
 const evaluationIdentitySchema = z.object({ id, label: id });
-const evaluationMetadataSchema = evaluationIdentitySchema.merge(
-  ruleEvaluationSchema.omit({ findings: true, diagnostics: true }).strip()
-);
+const evaluationMetadataSchema = evaluationIdentitySchema
+  .merge(ruleEvaluationSchema.omit({ findings: true, diagnostics: true }).strip())
+  .extend({ findingCount: count });
 const evaluationIssueSchema = evaluationIdentitySchema.extend({ reason: id });
 export const evaluationListSchema = pageOf(evaluationMetadataSchema).extend({
   issues: z.array(evaluationIssueSchema)
 });
 export const evaluationDetailSchema = evaluationMetadataSchema.extend({
-  diagnostics: ruleEvaluationSchema.shape.diagnostics,
-  findingCount: count
+  diagnostics: ruleEvaluationSchema.shape.diagnostics
 });
 
-const comparisonSchema = z.object({ rulesChanged: z.boolean(), hierarchyChanged: z.boolean() });
+const comparisonSchema = z.object({
+  rulesChanged: z.boolean(),
+  hierarchyChanged: z.boolean(),
+  engineChanged: z
+    .boolean()
+    .describe("The evaluations come from different governance engine versions."),
+  unrelatedBaseline: z
+    .boolean()
+    .describe("Both evaluations have findings, but they share no component.")
+});
 export const findingSummarySchema = z.object({
   id,
   evaluationId: id.describe("Evaluation containing this finding, including resolved findings."),
@@ -58,6 +69,15 @@ export const findingsPageSchema = pageOf(findingSummarySchema).extend({
 export const findingDetailSchema = findingSummarySchema.extend({
   evidence: dependencyEvidencePageSchema
 });
+export const findingHighlightsSchema = z.object({
+  total: count.describe("Findings matching the filters, including those beyond the cap."),
+  items: z
+    .array(z.object({ componentIds: z.array(id).min(1), severity: ruleSeveritySchema }))
+    .max(MAX_FINDING_HIGHLIGHTS)
+    .describe(
+      "Components of each matching finding in this evaluation, for graph highlights. Resolved findings are not included."
+    )
+});
 export const evaluationHealthSchema = z.object({
   bySeverity: z.object({ error: count, warning: count }),
   byRule: z.array(z.object({ ruleId: id, count })),
@@ -76,4 +96,5 @@ export type FindingsQuery = z.output<typeof findingsQuerySchema>;
 export type FindingsPage = z.infer<typeof findingsPageSchema>;
 export type FindingSummary = z.infer<typeof findingSummarySchema>;
 export type FindingDetail = z.infer<typeof findingDetailSchema>;
+export type FindingHighlights = z.infer<typeof findingHighlightsSchema>;
 export type EvaluationHealth = z.infer<typeof evaluationHealthSchema>;

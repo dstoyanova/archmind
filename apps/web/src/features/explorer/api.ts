@@ -4,9 +4,11 @@ import {
   componentGraphSchema,
   dependencyEvidencePageSchema,
   diagnosticsPageSchema,
+  evaluationDetailSchema,
   evaluationHealthSchema,
   evaluationListSchema,
   findingDetailSchema,
+  findingHighlightsSchema,
   findingsPageSchema,
   explorerErrorSchema,
   fileGraphSchema,
@@ -140,10 +142,8 @@ function evaluationRequest(
   query: URLSearchParams,
   signal: AbortSignal
 ) {
-  return request(
-    `/api/workspaces/local/evaluations/${encodeURIComponent(id)}/${resource}?${query}`,
-    signal
-  );
+  const path = [encodeURIComponent(id), resource].filter(Boolean).join("/");
+  return request(`/api/workspaces/local/evaluations/${path}?${query}`, signal);
 }
 
 export async function fetchFindings(
@@ -177,4 +177,16 @@ export async function fetchHealth(id: string, baseline: string, signal: AbortSig
   const query = new URLSearchParams();
   if (baseline) query.set("baseline", baseline);
   return evaluationHealthSchema.parse(await evaluationRequest(id, "health", query, signal));
+}
+
+export async function fetchEvaluation(id: string, signal: AbortSignal) {
+  return evaluationDetailSchema.parse(
+    await evaluationRequest(id, "", new URLSearchParams(), signal)
+  );
+}
+
+export async function fetchHighlights(id: string, filters: string, signal: AbortSignal) {
+  return findingHighlightsSchema.parse(
+    await evaluationRequest(id, "highlights", new URLSearchParams(filters), signal)
+  );
 }

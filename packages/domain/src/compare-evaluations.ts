@@ -1,4 +1,5 @@
 interface ComparableEvaluation<Finding> {
+  readonly governanceEngineVersion: string;
   readonly rulesHash: string;
   readonly analysisConfigHash: string;
   readonly findings: readonly Finding[];
@@ -10,6 +11,7 @@ export interface EvaluationComparison<Finding> {
   readonly resolvedFindings: readonly Finding[];
   readonly rulesChanged: boolean;
   readonly hierarchyChanged: boolean;
+  readonly engineChanged: boolean;
 }
 
 export function compareEvaluations<Finding extends { readonly fingerprint: string }>(
@@ -23,6 +25,7 @@ export function compareEvaluations<Finding extends { readonly fingerprint: strin
     existingFindings: head.findings.filter((finding) => baseFingerprints.has(finding.fingerprint)),
     resolvedFindings: base.findings.filter((finding) => !headFingerprints.has(finding.fingerprint)),
     rulesChanged: base.rulesHash !== head.rulesHash,
-    hierarchyChanged: base.analysisConfigHash !== head.analysisConfigHash
+    hierarchyChanged: base.analysisConfigHash !== head.analysisConfigHash,
+    engineChanged: base.governanceEngineVersion !== head.governanceEngineVersion
   };
 }

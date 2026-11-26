@@ -22,7 +22,7 @@ On an Apple M4 developer laptop (headless Chromium 159, 1440 × 900 viewport), a
 
 CI checks that the graph renders and logs the timings. Set `ARCHMIND_ENFORCE_RENDER_BUDGET=1` to enforce the laptop budgets on a comparable machine.
 
-The M3.5 benchmark also selects a governance evaluation with 299 findings before measuring expand and collapse. It verifies 298 badges while collapsed (two findings share a visible ancestor) and 299 after expansion. With budgets enforced, the first render took 390 ms, expand with highlights took 418 ms, and collapse with highlights took 366 ms.
+The M3.5 benchmark also selects a governance evaluation before measuring expand and collapse. After the M3 review it has 3,299 findings (299 coupling findings and 3,000 forbidden dependencies, one per stored dependency), loaded through one highlights request. It verifies 298 badges while collapsed (two components share a visible ancestor, which counts 42 findings) and 299 after expansion. With budgets enforced, the first render took 444 ms, expand with highlights took 398 ms, and collapse with highlights took 399 ms.
 
 ## Layout decision
 

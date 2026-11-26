@@ -1,50 +1,50 @@
-import type {
-  EvaluationDetail,
-  EvaluationHealth,
-  EvaluationList,
-  FindingDetail,
-  FindingSubject,
-  FindingSummary,
-  FindingsPage,
-  FindingsQuery,
-  PageQuery,
-  RuleEvaluation,
-  RuleFinding,
-  SnapshotIdentity
+import {
+  compareRuleEvaluations,
+  findingComponentIds,
+  MAX_FINDING_HIGHLIGHTS,
+  type EvaluationDetail,
+  type EvaluationHealth,
+  type EvaluationList,
+  type FindingDetail,
+  type FindingHighlights,
+  type FindingSummary,
+  type FindingsPage,
+  type FindingsQuery,
+  type PageQuery,
+  type RuleEvaluationComparison,
+  type RuleFinding,
+  type SnapshotIdentity
 } from "@archmind/contracts";
-import { compareEvaluations, compareStrings } from "@archmind/domain";
+import { compareStrings } from "@archmind/domain";
 import { HttpException, Inject, Injectable } from "@nestjs/common";
 
 import { paginate } from "../architecture-model/explorer-pagination.js";
 import { SNAPSHOT_READER, type SnapshotReader } from "../architecture-model/snapshot-reader.js";
+import { findIntegrityIssue } from "./evaluation-integrity.js";
 import {
   EVALUATION_READER,
   type EvaluationIdentity,
+  type EvaluationMetadata,
   type EvaluationReader
 } from "./file-evaluation-reader.js";
+
+const INTEGRITY_CACHE_ENTRIES = 256;
 
 function fail(status: number, code: string, message: string): never {
   throw new HttpException({ error: { code, message } }, status);
 }
 
-function metadata(identity: EvaluationIdentity, evaluation: RuleEvaluation) {
-  const {
-    schemaVersion,
-    governanceEngineVersion,
-    rulesHash,
-    contentHash,
-    analysisConfigHash,
-    createdAt
-  } = evaluation;
-  return {
-    ...identity,
-    schemaVersion,
-    governanceEngineVersion,
-    rulesHash,
-    contentHash,
-    analysisConfigHash,
-    createdAt
-  };
+function metadata(identity: EvaluationIdentity, evaluation: EvaluationMetadata) {
+  return { ...identity, ...evaluation };
+}
+
+function comparisonFlags({
+  rulesChanged,
+  hierarchyChanged,
+  engineChanged,
+  unrelatedBaseline
+}: RuleEvaluationComparison) {
+  return { rulesChanged, hierarchyChanged, engineChanged, unrelatedBaseline };
 }
 
 function summary(evaluationId: string, finding: RuleFinding): FindingSummary {
@@ -72,19 +72,10 @@ function summary(evaluationId: string, finding: RuleFinding): FindingSummary {
   };
 }
 
-function componentsOf(subject: FindingSubject): string[] {
-  switch (subject.kind) {
-    case "components":
-      return subject.componentIds;
-    case "dependency":
-      return [subject.fromComponentId, subject.toComponentId];
-    case "external-package":
-      return [subject.componentId];
-  }
-}
-
 @Injectable()
 export class GovernanceService {
+  private readonly integrity = new Map<string, string | undefined>();
+
   constructor(
     @Inject(SNAPSHOT_READER) private readonly snapshots: SnapshotReader,
     @Inject(EVALUATION_READER) private readonly evaluations: EvaluationReader
@@ -100,16 +91,21 @@ export class GovernanceService {
     const items: EvaluationList["items"] = [];
     const issues: EvaluationList["issues"] = [];
     for (const candidate of await this.evaluations.list()) {
-      const loaded = await this.evaluations.load(candidate);
-      if (loaded.status === "invalid") {
-        issues.push({ ...candidate, reason: loaded.reason });
-      } else if (!snapshots.has(loaded.evaluation.contentHash)) {
+      const summary = await this.evaluations.summarize(candidate);
+      if (summary.status === "invalid") {
+        issues.push({ ...candidate, reason: summary.reason });
+        continue;
+      }
+      const snapshotIdentity = snapshots.get(summary.metadata.contentHash);
+      if (!snapshotIdentity) {
         issues.push({
           ...candidate,
           reason: "No readable snapshot matches the evaluation content hash."
         });
-      } else if (loaded.evaluation.contentHash === snapshot.contentHash) {
-        items.push(metadata(candidate, loaded.evaluation));
+      } else if (summary.metadata.contentHash === snapshot.contentHash) {
+        const reason = await this.integrityIssue(candidate, summary.revision, snapshotIdentity);
+        if (reason === undefined) items.push(metadata(candidate, summary.metadata));
+        else issues.push({ ...candidate, reason });
       }
     }
     return {
@@ -121,44 +117,15 @@ export class GovernanceService {
   async detail(id: string): Promise<EvaluationDetail> {
     const { identity, evaluation } = await this.get(id);
     return {
-      ...metadata(identity, evaluation),
-      diagnostics: evaluation.diagnostics,
-      findingCount: evaluation.findings.length
+      ...metadata(identity, { ...evaluation, findingCount: evaluation.findings.length }),
+      diagnostics: evaluation.diagnostics
     };
   }
 
   async findings(id: string, query: FindingsQuery): Promise<FindingsPage> {
     const { baseline, severity, status, ruleId } = query;
-    if (status !== undefined && baseline === undefined) {
-      fail(400, "INVALID_REQUEST", "The status filter requires a baseline evaluation.");
-    }
-    const catalog = await this.evaluations.list();
-    const head = await this.get(id, catalog);
-    const base = baseline === undefined ? undefined : await this.get(baseline, catalog);
-    const comparison = base && compareEvaluations(base.evaluation, head.evaluation);
-    let findings: FindingSummary[];
-    if (base && comparison) {
-      const existing = new Set(comparison.existingFindings.map((item) => item.fingerprint));
-      findings =
-        status === "resolved"
-          ? comparison.resolvedFindings.map((item) => ({
-              ...summary(base.identity.id, item),
-              status: "resolved"
-            }))
-          : head.evaluation.findings.map((item) => ({
-              ...summary(id, item),
-              status: existing.has(item.fingerprint) ? "existing" : "new"
-            }));
-    } else {
-      findings = head.evaluation.findings.map((item) => summary(id, item));
-    }
-    const filtered = findings.filter(
-      (item) =>
-        (severity === undefined || item.severity === severity) &&
-        (ruleId === undefined || item.ruleId === ruleId) &&
-        (status === undefined || item.status === status)
-    );
-    const page = paginate(filtered, query, {
+    const { head, base, comparison, findings } = await this.resolveFindings(id, query);
+    const page = paginate(findings, query, {
       kind: "findings",
       id,
       revision: head.revision,
@@ -168,15 +135,19 @@ export class GovernanceService {
       status,
       ruleId
     });
-    return comparison
-      ? {
-          ...page,
-          comparison: {
-            rulesChanged: comparison.rulesChanged,
-            hierarchyChanged: comparison.hierarchyChanged
-          }
-        }
-      : page;
+    return comparison ? { ...page, comparison: comparisonFlags(comparison) } : page;
+  }
+
+  async highlights(id: string, query: Omit<FindingsQuery, "cursor" | "limit">) {
+    const { findings } = await this.resolveFindings(id, query);
+    const items = findings
+      .filter((item) => item.status !== "resolved")
+      .slice(0, MAX_FINDING_HIGHLIGHTS)
+      .map(({ subject, severity }) => ({
+        componentIds: [...new Set(findingComponentIds(subject))],
+        severity
+      }));
+    return { total: findings.length, items } satisfies FindingHighlights;
   }
 
   async finding(id: string, findingId: string, query: PageQuery): Promise<FindingDetail> {
@@ -213,11 +184,11 @@ export class GovernanceService {
     for (const item of head.evaluation.findings) {
       bySeverity[item.severity]++;
       increment(byRule, item.ruleId);
-      for (const component of new Set(componentsOf(item.subject)))
+      for (const component of new Set(findingComponentIds(item.subject)))
         increment(byComponent, component);
     }
     for (const diagnostic of snapshot.diagnostics) increment(byCode, diagnostic.code);
-    const comparison = base && compareEvaluations(base.evaluation, head.evaluation);
+    const comparison = base && compareRuleEvaluations(base.evaluation, head.evaluation);
     return {
       bySeverity,
       byRule: [...byRule]
@@ -235,12 +206,51 @@ export class GovernanceService {
       },
       ...(comparison && {
         comparison: {
-          rulesChanged: comparison.rulesChanged,
-          hierarchyChanged: comparison.hierarchyChanged,
+          ...comparisonFlags(comparison),
           newCount: comparison.newFindings.length,
           resolvedCount: comparison.resolvedFindings.length
         }
       })
+    };
+  }
+
+  private async resolveFindings(
+    id: string,
+    { baseline, severity, status, ruleId }: Omit<FindingsQuery, "cursor" | "limit">
+  ) {
+    if (status !== undefined && baseline === undefined) {
+      fail(400, "INVALID_REQUEST", "The status filter requires a baseline evaluation.");
+    }
+    const catalog = await this.evaluations.list();
+    const head = await this.get(id, catalog);
+    const base = baseline === undefined ? undefined : await this.get(baseline, catalog);
+    const comparison = base && compareRuleEvaluations(base.evaluation, head.evaluation);
+    let findings: FindingSummary[];
+    if (base && comparison) {
+      const existing = new Set(comparison.existingFindings.map((item) => item.fingerprint));
+      findings =
+        status === "resolved"
+          ? comparison.resolvedFindings.map((item) => ({
+              ...summary(base.identity.id, item),
+              status: "resolved"
+            }))
+          : head.evaluation.findings.map((item) => ({
+              ...summary(id, item),
+              status: existing.has(item.fingerprint) ? "existing" : "new"
+            }));
+    } else {
+      findings = head.evaluation.findings.map((item) => summary(id, item));
+    }
+    return {
+      head,
+      base,
+      comparison,
+      findings: findings.filter(
+        (item) =>
+          (severity === undefined || item.severity === severity) &&
+          (ruleId === undefined || item.ruleId === ruleId) &&
+          (status === undefined || item.status === status)
+      )
     };
   }
 
@@ -253,7 +263,32 @@ export class GovernanceService {
     const snapshotIdentity = snapshots.get(loaded.evaluation.contentHash);
     if (!snapshotIdentity)
       fail(422, "INVALID_EVALUATION", "No readable snapshot matches the evaluation content hash.");
+    const reason = await this.integrityIssue(identity, loaded.revision, snapshotIdentity);
+    if (reason !== undefined) fail(422, "INVALID_EVALUATION", reason);
     return { identity, snapshotIdentity, ...loaded };
+  }
+
+  /** Checks an evaluation against its snapshot once per file revision and snapshot content. */
+  private async integrityIssue(
+    identity: EvaluationIdentity,
+    revision: string,
+    snapshotIdentity: SnapshotIdentity
+  ): Promise<string | undefined> {
+    const evaluation = await this.evaluations.load(identity);
+    if (evaluation.status === "invalid") return evaluation.reason;
+    const key = `${identity.id}:${revision}:${evaluation.evaluation.contentHash}`;
+    if (this.integrity.has(key)) return this.integrity.get(key);
+    const snapshot = await this.snapshots.load(snapshotIdentity);
+    const reason =
+      snapshot.status === "invalid"
+        ? snapshot.reason
+        : findIntegrityIssue(evaluation.evaluation, snapshot.data);
+    this.integrity.set(key, reason);
+    const oldest = this.integrity.keys().next().value;
+    if (this.integrity.size > INTEGRITY_CACHE_ENTRIES && oldest !== undefined) {
+      this.integrity.delete(oldest);
+    }
+    return reason;
   }
 
   private async snapshotIndex(identities: readonly SnapshotIdentity[]) {

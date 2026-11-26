@@ -62,7 +62,10 @@ export class ExplorerService {
       this.component(loaded, query.componentId);
       return toFileGraph(loaded.projector.projectFileGraph(query.componentId, options));
     }
-    return toComponentGraph(loaded.projector.projectGraph(options));
+    const graph = toComponentGraph(loaded.projector.projectGraph(options));
+    return query.includeDependencies
+      ? graph
+      : { ...graph, dependencies: [], externalDependencies: [], cycles: [] };
   }
 
   async detail(id: string, componentId: string, query: ProjectionQuery): Promise<ComponentDetail> {

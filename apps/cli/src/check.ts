@@ -12,17 +12,21 @@ import { DEFAULT_SNAPSHOT_SCHEMA_VERSION, verifyContentHash } from "@archmind/ar
 import {
   architectureSnapshotSchema,
   archmindConfigSchema,
+  compareRuleEvaluations,
   ruleEvaluationSchema,
   ruleSeveritySchema,
   type ArchitectureSnapshotDocument,
   type RuleEvaluation,
+  type RuleEvaluationComparison,
   type RuleFinding
 } from "@archmind/contracts";
-import { compareEvaluations, compareStrings, type EvaluationComparison } from "@archmind/domain";
+import { compareStrings } from "@archmind/domain";
 import { evaluate, GOVERNANCE_ENGINE_VERSION } from "@archmind/governance-engine";
 
 import { writeJsonAtomically } from "./analyze.js";
 import type { CliIo } from "./main.js";
+
+const SUMMARY_FINDING_LIMIT = 20;
 
 export const CHECK_USAGE =
   "  archmind check [<path>] [--snapshot <snapshot.json>] [--out <evaluation.json>] [--format summary|evaluation] [--fail-on error|warning] [--baseline <evaluation.json> [--new-only]]";
@@ -107,24 +111,39 @@ export async function runCheck(args: string[], io: CliIo): Promise<number> {
 
     const evaluation = evaluate(snapshot, config.data.rules, GOVERNANCE_ENGINE_VERSION);
     const comparison =
-      baseline === undefined ? undefined : compareEvaluations(baseline, evaluation);
+      baseline === undefined ? undefined : compareRuleEvaluations(baseline, evaluation);
     await writeJsonAtomically(outputPath, evaluation);
+    const counted = values["new-only"] && comparison ? comparison.newFindings : evaluation.findings;
+    const failing = counted.filter(
+      (finding) => severity.data === "warning" || finding.severity === "error"
+    );
     if (values.format === "summary") {
-      io.stdout(formatSummary(snapshot, evaluation, comparison, outputPath, values["new-only"]));
+      io.stdout(
+        formatSummary(snapshot, evaluation, comparison, outputPath, values["new-only"], failing)
+      );
     }
     for (const diagnostic of evaluation.diagnostics) {
       io.stderr(
         `Rule ${diagnostic.ruleId}${diagnostic.field ? ` (${diagnostic.field})` : ""}: ${diagnostic.message}`
       );
     }
+    if (comparison?.unrelatedBaseline) {
+      io.stderr(
+        "Warning: The baseline and this evaluation share no component. Check that the baseline belongs to this project."
+      );
+    }
     if (evaluation.diagnostics.length > 0) {
       return 2;
     }
-    const findings =
-      values["new-only"] && comparison ? comparison.newFindings : evaluation.findings;
-    return findings.some((finding) => severity.data === "warning" || finding.severity === "error")
-      ? 1
-      : 0;
+    if (failing.length > 0) {
+      if (values.format !== "summary") {
+        io.stderr(
+          `${failing.length} finding(s) at or above "${severity.data}" severity. Use --format summary to list them.`
+        );
+      }
+      return 1;
+    }
+    return 0;
   } catch (error) {
     io.stderr(`Check failed: ${error instanceof Error ? error.message : String(error)}`);
     return 2;
@@ -169,9 +188,10 @@ async function readBaseline(filePath: string): Promise<RuleEvaluation> {
 function formatSummary(
   snapshot: ArchitectureSnapshotDocument,
   evaluation: RuleEvaluation,
-  comparison: EvaluationComparison<RuleFinding> | undefined,
+  comparison: RuleEvaluationComparison | undefined,
   outputPath: string,
-  newOnly: boolean
+  newOnly: boolean,
+  failing: readonly RuleFinding[]
 ): string {
   const tally = (counts: Map<string, number>, key: string) =>
     counts.set(key, (counts.get(key) ?? 0) + 1);
@@ -190,10 +210,11 @@ function formatSummary(
     `- findings: ${errors} error(s), ${warnings} warning(s)`,
     "- findings by rule:",
     ...(byRule.size > 0 ? formatCounts(byRule) : ["  - none"]),
+    ...formatFailing(failing, newOnly),
     ...(comparison
       ? [
           `- baseline: ${comparison.newFindings.length} new, ${comparison.existingFindings.length} existing, ${comparison.resolvedFindings.length} resolved`,
-          `  - rules changed: ${comparison.rulesChanged ? "yes" : "no"}; hierarchy changed: ${comparison.hierarchyChanged ? "yes" : "no"}`,
+          `  - rules changed: ${comparison.rulesChanged ? "yes" : "no"}; hierarchy changed: ${comparison.hierarchyChanged ? "yes" : "no"}; engine changed: ${comparison.engineChanged ? "yes" : "no"}`,
           ...(newOnly ? ["  - only new findings count toward the exit code"] : [])
         ]
       : []),
@@ -201,4 +222,21 @@ function formatSummary(
     ...formatCounts(byCode),
     `- rule diagnostics: ${evaluation.diagnostics.length}`
   ].join("\n");
+}
+
+function formatFailing(failing: readonly RuleFinding[], newOnly: boolean): string[] {
+  if (failing.length === 0) {
+    return [];
+  }
+  const lines = failing.slice(0, SUMMARY_FINDING_LIMIT).map((finding) => {
+    const first = finding.evidence[0];
+    const location = first ? ` (${first.filePath}:${first.line}:${first.column})` : "";
+    return `  - [${finding.severity}] ${finding.ruleId}: ${finding.message}${location}`;
+  });
+  const hidden = failing.length - lines.length;
+  return [
+    `- ${newOnly ? "new findings" : "findings"} that fail the check (${failing.length}):`,
+    ...lines,
+    ...(hidden > 0 ? [`  - … and ${hidden} more in the evaluation file`] : [])
+  ];
 }

@@ -202,6 +202,15 @@ describe("local explorer", () => {
     if (!edge) throw new Error("Missing projected edge.");
     const { fromComponentId, toComponentId } = edge;
     expect(edge).not.toHaveProperty("evidenceImportIds");
+    const componentsOnly = componentGraphSchema.parse(
+      await json(`${path}/graph?includeDependencies=false`)
+    );
+    expect(componentsOnly.components).toEqual(graph.components);
+    expect(componentsOnly).toMatchObject({
+      dependencies: [],
+      externalDependencies: [],
+      cycles: []
+    });
     const evidenceQuery = new URLSearchParams({ from: fromComponentId, to: toComponentId });
     const evidence = dependencyEvidencePageSchema.parse(
       await json(`${path}/dependencies?${evidenceQuery}`)

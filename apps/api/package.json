@@ -15,7 +15,6 @@
     "@archmind/architecture-engine": "workspace:*",
     "@archmind/contracts": "workspace:*",
     "@archmind/domain": "workspace:*",
-    "@archmind/governance-engine": "workspace:*",
     "@asteasolutions/zod-to-openapi": "^7.3.4",
     "@nestjs/common": "^11.2.11",
     "@nestjs/core": "^11.2.11",
@@ -28,6 +27,7 @@
   },
   "devDependencies": {
     "@archmind/analysis-pipeline": "workspace:*",
+    "@archmind/governance-engine": "workspace:*",
     "esbuild": "0.28.2"
   }
 }

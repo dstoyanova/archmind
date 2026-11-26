@@ -5,7 +5,6 @@ import { join } from "node:path";
 
 import { ruleEvaluationSchema, type RuleEvaluation } from "@archmind/contracts";
 import { compareStrings } from "@archmind/domain";
-import { GOVERNANCE_ENGINE_VERSION } from "@archmind/governance-engine";
 
 import { fileFingerprint, readStableDocument } from "../architecture-model/local-document.js";
 
@@ -18,36 +17,89 @@ export interface EvaluationIdentity {
   label: string;
 }
 
-type LoadResult =
-  | { status: "ready"; evaluation: RuleEvaluation; revision: string }
-  | { status: "invalid"; reason: string };
+type Invalid = { status: "invalid"; reason: string };
+type LoadResult = { status: "ready"; evaluation: RuleEvaluation; revision: string } | Invalid;
+export type EvaluationMetadata = Omit<RuleEvaluation, "findings" | "diagnostics"> & {
+  findingCount: number;
+};
+type SummaryResult = { status: "ready"; metadata: EvaluationMetadata; revision: string } | Invalid;
 
 export interface EvaluationReader {
   list(): Promise<readonly EvaluationIdentity[]>;
+  /** Cheap per-file summary, cached by file fingerprint like snapshot list items. */
+  summarize(identity: EvaluationIdentity): Promise<SummaryResult>;
   load(identity: EvaluationIdentity): Promise<LoadResult>;
 }
 
-function invalid(reason: string): LoadResult {
+function invalid(reason: string): Invalid {
   return { status: "invalid", reason };
+}
+
+function summarize(result: LoadResult): SummaryResult {
+  if (result.status === "invalid") return result;
+  const { evaluation, revision } = result;
+  return {
+    status: "ready",
+    metadata: {
+      schemaVersion: evaluation.schemaVersion,
+      governanceEngineVersion: evaluation.governanceEngineVersion,
+      rulesHash: evaluation.rulesHash,
+      contentHash: evaluation.contentHash,
+      analysisConfigHash: evaluation.analysisConfigHash,
+      createdAt: evaluation.createdAt,
+      findingCount: evaluation.findings.length
+    },
+    revision
+  };
 }
 
 export class FileEvaluationReader implements EvaluationReader {
   private readonly cache = new Map<string, { revision: string; result: Promise<LoadResult> }>();
+  private readonly summaries = new Map<string, { revision: string; result: SummaryResult }>();
 
   constructor(private readonly directory: string) {}
 
   async list(): Promise<readonly EvaluationIdentity[]> {
     const entries = await readdir(this.directory, { withFileTypes: true });
-    return entries
+    const identities = entries
       .filter(
         (entry) =>
           (entry.isFile() || entry.isSymbolicLink()) && entry.name.endsWith(".evaluation.json")
       )
       .map(({ name }) => ({ id: createHash("sha256").update(name).digest("hex"), label: name }))
       .sort((a, b) => compareStrings(a.label, b.label));
+    const listed = new Set(identities.map(({ id }) => id));
+    for (const id of this.summaries.keys()) {
+      if (!listed.has(id)) this.summaries.delete(id);
+    }
+    return identities;
   }
 
-  async load(identity: EvaluationIdentity): Promise<LoadResult> {
+  async summarize(identity: EvaluationIdentity): Promise<SummaryResult> {
+    return this.withFile(identity, async (handle, stat, revision) => {
+      const cached = this.summaries.get(identity.id);
+      if (cached?.revision === revision) return cached.result;
+      const result = summarize(await this.read(identity, handle, stat, revision));
+      this.summaries.set(identity.id, { revision, result });
+      return result;
+    });
+  }
+
+  load(identity: EvaluationIdentity): Promise<LoadResult> {
+    return this.withFile(identity, (handle, stat, revision) =>
+      this.read(identity, handle, stat, revision)
+    );
+  }
+
+  private forget(identity: EvaluationIdentity): void {
+    this.cache.delete(identity.id);
+    this.summaries.delete(identity.id);
+  }
+
+  private async withFile<T>(
+    identity: EvaluationIdentity,
+    use: (handle: FileHandle, stat: BigIntStats, revision: string) => Promise<T>
+  ): Promise<T | Invalid> {
     let handle: FileHandle;
     try {
       handle = await open(
@@ -60,7 +112,7 @@ export class FileEvaluationReader implements EvaluationReader {
         "code" in error &&
         ["ENOENT", "ELOOP", "EACCES", "EPERM"].some((code) => code === error.code)
       ) {
-        this.cache.delete(identity.id);
+        this.forget(identity);
         return invalid("Evaluation file is not available, readable, or is a symbolic link.");
       }
       throw error;
@@ -69,31 +121,39 @@ export class FileEvaluationReader implements EvaluationReader {
     try {
       const stat = await handle.stat({ bigint: true });
       if (!stat.isFile() || stat.size > MAX_BYTES) {
-        this.cache.delete(identity.id);
+        this.forget(identity);
         return invalid(
           stat.isFile()
             ? "Evaluation exceeds the 16 MiB size limit."
             : "Not a regular evaluation file."
         );
       }
-      const revision = fileFingerprint(stat);
-      const cached = this.cache.get(identity.id);
-      const entry =
-        cached?.revision === revision
-          ? cached
-          : { revision, result: readEvaluation(handle, stat, revision) };
-      this.cache.delete(identity.id);
-      this.cache.set(identity.id, entry);
-      const oldest = this.cache.keys().next().value;
-      if (this.cache.size > CACHE_ENTRIES && oldest !== undefined) this.cache.delete(oldest);
-      try {
-        return await entry.result;
-      } catch (error) {
-        if (this.cache.get(identity.id) === entry) this.cache.delete(identity.id);
-        throw error;
-      }
+      return await use(handle, stat, fileFingerprint(stat));
     } finally {
       await handle.close();
+    }
+  }
+
+  private async read(
+    identity: EvaluationIdentity,
+    handle: FileHandle,
+    stat: BigIntStats,
+    revision: string
+  ): Promise<LoadResult> {
+    const cached = this.cache.get(identity.id);
+    const entry =
+      cached?.revision === revision
+        ? cached
+        : { revision, result: readEvaluation(handle, stat, revision) };
+    this.cache.delete(identity.id);
+    this.cache.set(identity.id, entry);
+    const oldest = this.cache.keys().next().value;
+    if (this.cache.size > CACHE_ENTRIES && oldest !== undefined) this.cache.delete(oldest);
+    try {
+      return await entry.result;
+    } catch (error) {
+      if (this.cache.get(identity.id) === entry) this.cache.delete(identity.id);
+      throw error;
     }
   }
 }
@@ -120,9 +180,6 @@ async function readEvaluation(
         ? "Evaluation schema version is missing or not supported."
         : "Evaluation does not match the document schema."
     );
-  }
-  if (parsed.data.governanceEngineVersion !== GOVERNANCE_ENGINE_VERSION) {
-    return invalid("Governance engine version is not supported.");
   }
   const fingerprints = new Set(parsed.data.findings.map((item) => item.fingerprint));
   if (fingerprints.size !== parsed.data.findings.length)

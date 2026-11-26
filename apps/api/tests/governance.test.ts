@@ -21,6 +21,7 @@ import {
   evaluationHealthSchema,
   evaluationListSchema,
   findingDetailSchema,
+  findingHighlightsSchema,
   findingsPageSchema,
   ruleEvaluationSchema,
   snapshotListSchema
@@ -69,12 +70,29 @@ beforeAll(async () => {
   const invalid = {
     orphan: { ...baseline, contentHash: "0".repeat(64) },
     unsupported: { ...baseline, schemaVersion: "999" },
-    "unsupported-engine": { ...baseline, governanceEngineVersion: "999" },
+    "unknown-component": {
+      ...baseline,
+      findings: baseline.findings.map((finding) => ({
+        ...finding,
+        subject: { kind: "components", componentIds: ["cmp:unknown"] }
+      }))
+    },
+    "unknown-file": {
+      ...baseline,
+      findings: baseline.findings.map((finding) => ({
+        ...finding,
+        evidence: finding.evidence.map((item) => ({ ...item, filePath: "src/ghost.ts" }))
+      }))
+    },
     "invalid-schema": { ...baseline, findings: null }
   };
   for (const [label, document] of Object.entries(invalid)) {
     await writeFile(join(documents, `${label}.evaluation.json`), JSON.stringify(document));
   }
+  await writeFile(
+    join(documents, "z-older-engine.evaluation.json"),
+    JSON.stringify({ ...baseline, governanceEngineVersion: "0.0.1" })
+  );
   await writeFile(join(documents, "invalid-json.evaluation.json"), "{");
   await symlink(
     join(documents, "base-policy.evaluation.json"),
@@ -123,7 +141,6 @@ describe("local governance explorer", () => {
       ["large.evaluation.json", expect.stringContaining("16 MiB")],
       ["orphan.evaluation.json", expect.stringContaining("content hash")],
       ["symlink.evaluation.json", expect.stringContaining("symbolic link")],
-      ["unsupported-engine.evaluation.json", expect.stringContaining("engine version")],
       ["unsupported.evaluation.json", expect.stringContaining("schema version")]
     ]);
     for (const { id, reason } of head.issues) {
@@ -147,7 +164,12 @@ describe("local governance explorer", () => {
     const first = findingsPageSchema.parse(
       await json(`${route}/findings?${query}&status=resolved&limit=1`)
     );
-    expect(first.comparison).toEqual({ rulesChanged: false, hierarchyChanged: false });
+    expect(first.comparison).toEqual({
+      rulesChanged: false,
+      hierarchyChanged: false,
+      engineChanged: false,
+      unrelatedBaseline: false
+    });
     expect(first.items).toMatchObject([{ status: "resolved", evaluationId: baseline.id }]);
     expect(first.nextCursor).not.toBeNull();
     const rest = findingsPageSchema.parse(
@@ -188,6 +210,57 @@ describe("local governance explorer", () => {
       coverage: { unresolvedRate: 0, diagnosticTotal: 0, diagnosticsByCode: {} },
       comparison: { newCount: 1, resolvedCount: 4 }
     });
+  });
+
+  it("accepts evaluations from another engine version and flags the comparison", async () => {
+    const [head] = (await list("head.json")).items;
+    const older = (await list("base.json")).items.find(({ label }) => label.startsWith("z-older"));
+    if (!head || !older) throw new Error("Missing evaluations.");
+    expect(older).toMatchObject({ governanceEngineVersion: "0.0.1", findingCount: 6 });
+    const route = `${workspace}/evaluations/${head.id}`;
+    const page = findingsPageSchema.parse(await json(`${route}/findings?baseline=${older.id}`));
+    expect(page.comparison).toMatchObject({ engineChanged: true, unrelatedBaseline: false });
+    const health = evaluationHealthSchema.parse(await json(`${route}/health?baseline=${older.id}`));
+    expect(health.comparison).toMatchObject({ engineChanged: true, newCount: 1, resolvedCount: 4 });
+  });
+
+  it("reports evaluations that do not fit their snapshot as invalid, with a reason", async () => {
+    const { items, issues } = await list("base.json");
+    expect(items.map(({ label }) => label)).not.toContain("unknown-component.evaluation.json");
+    expect(issues.map(({ label, reason }) => [label, reason])).toEqual(
+      expect.arrayContaining([
+        ["unknown-component.evaluation.json", expect.stringContaining("component")],
+        ["unknown-file.evaluation.json", expect.stringContaining("file")]
+      ])
+    );
+    for (const { id, reason } of issues.filter(({ label }) => label.startsWith("unknown-"))) {
+      expect(await json(`${workspace}/evaluations/${id}`, 422)).toMatchObject({
+        error: { code: "INVALID_EVALUATION", message: reason }
+      });
+    }
+  });
+
+  it("returns filtered highlights without resolved findings", async () => {
+    const [head] = (await list("head.json")).items;
+    const [baseline] = (await list("base.json")).items;
+    if (!head || !baseline) throw new Error("Missing evaluations.");
+    const route = `${workspace}/evaluations/${head.id}/highlights`;
+    const all = findingHighlightsSchema.parse(await json(route));
+    expect(all.total).toBe(head.findingCount);
+    expect(all.items).toHaveLength(head.findingCount);
+    expect(all.items.every(({ componentIds }) => componentIds.length > 0)).toBe(true);
+    const errors = findingHighlightsSchema.parse(await json(`${route}?severity=error`));
+    expect(errors.items.map(({ severity }) => severity)).toEqual(["error"]);
+    const created = findingHighlightsSchema.parse(
+      await json(`${route}?baseline=${baseline.id}&status=new`)
+    );
+    expect(created.items).toHaveLength(1);
+    const resolved = findingHighlightsSchema.parse(
+      await json(`${route}?baseline=${baseline.id}&status=resolved`)
+    );
+    expect(resolved).toEqual({ total: 4, items: [] });
+    await json(`${route}?status=new`, 400);
+    await json(`${route}?limit=1`, 400);
   });
 
   it("caches a file by fingerprint and reloads a replacement under the same opaque ID", async () => {

@@ -71,6 +71,18 @@ describe("governance rule configuration", () => {
     }
   });
 
+  it("accepts Node.js built-ins by their node: name only in restricted-package names", () => {
+    const restricted = (packages: string[]) =>
+      rulesConfigSchema.safeParse({
+        definitions: [
+          { id: "no-fs", type: "restricted-package", severity: "error", packages, allow: [] }
+        ]
+      }).success;
+    expect(restricted(["node:fs", "node:fs/promises", "@vendor/database"])).toBe(true);
+    expect(restricted(["node:"])).toBe(false);
+    expect(restricted(["node:fs/"])).toBe(false);
+  });
+
   it.each([
     { definitions: [threshold, { ...threshold, id: " coupling " }], id: "coupling", field: "id" },
     { definitions: [{ ...threshold, max: -1 }], id: "coupling", field: "max" },

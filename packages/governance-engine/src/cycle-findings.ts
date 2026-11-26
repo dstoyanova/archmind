@@ -7,7 +7,6 @@ import {
 
 interface CycleSupport {
   memberIds: string[];
-  endpoints: [string, string][];
   imports: Set<string>;
 }
 
@@ -43,7 +42,7 @@ export function collectCycleSupport(
       if (typeOnly && !options.includeTypeOnlyCycles) {
         continue;
       }
-      const candidate: CycleSupport = { memberIds, endpoints: [], imports: new Set() };
+      const candidate: CycleSupport = { memberIds, imports: new Set() };
       candidates.push(candidate);
       for (const id of memberIds) {
         byMember.set(id, candidate);
@@ -52,7 +51,6 @@ export function collectCycleSupport(
     for (const { fromComponentId, toComponentId, evidenceImportIds } of dependencies) {
       const candidate = byMember.get(fromComponentId);
       if (candidate && candidate === byMember.get(toComponentId)) {
-        candidate.endpoints.push([fromComponentId, toComponentId]);
         for (const id of evidenceImportIds) {
           candidate.imports.add(id);
         }
@@ -93,7 +91,7 @@ export function collectCycleSupport(
         continue;
       }
       kept.push(candidate);
-      const key = canonicalJson([candidate.memberIds, candidate.endpoints]);
+      const key = canonicalJson(candidate.memberIds);
       const existing = results.get(key);
       if (existing) {
         // Distinct support at two depths can still describe the same projected subject.

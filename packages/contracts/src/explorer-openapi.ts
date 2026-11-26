@@ -28,9 +28,11 @@ import {
   evaluationHealthSchema,
   evaluationListSchema,
   findingDetailSchema,
+  findingHighlightsSchema,
   findingParamsSchema,
   findingsPageSchema,
-  findingsQuerySchema
+  findingsQuerySchema,
+  highlightsQuerySchema
 } from "./governance-schema.js";
 
 const routes = [
@@ -101,6 +103,13 @@ const governanceRoutes = [
     findingParamsSchema,
     pageQuerySchema,
     findingDetailSchema
+  ],
+  [
+    "getFindingHighlights",
+    "/evaluations/{id}/highlights",
+    snapshotParamsSchema,
+    highlightsQuerySchema,
+    findingHighlightsSchema
   ],
   [
     "getEvaluationHealth",

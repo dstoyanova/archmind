@@ -114,7 +114,7 @@ describe("archmind check", () => {
       );
       expect(head.code).toBe(1);
       expect(head.stdout).toContain("1 new, 2 existing, 4 resolved");
-      expect(head.stdout).toContain("rules changed: no; hierarchy changed: no");
+      expect(head.stdout).toContain("rules changed: no; hierarchy changed: no; engine changed: no");
     });
   });
 
@@ -123,7 +123,18 @@ describe("archmind check", () => {
       expect((await invoke("analyze", repo, "--out", snapshot)).code).toBe(0);
       const input = await readFile(snapshot, "utf8");
       const first = await invoke("check", repo, "--snapshot", snapshot);
-      expect(first.code).toBe(1);
+      expect(first).toMatchObject({
+        code: 1,
+        stdout: "",
+        stderr: expect.stringContaining('3 finding(s) at or above "error" severity')
+      });
+      const listed = await invoke("check", repo, "--snapshot", snapshot, "--format", "summary");
+      expect(listed.code).toBe(1);
+      expect(listed.stdout).toContain("- findings that fail the check (");
+      expect(listed.stdout).toMatch(
+        /\[error\] forbid-data-to-ui: Forbidden dependency from src\/data to src\/ui\. \(src\/data\/index\.ts:\d+:\d+\)/u
+      );
+      expect(listed.stdout).not.toContain("[warning] max-ui-fan-out");
       const firstEvaluation = ruleEvaluationSchema.parse(
         JSON.parse(await readFile(`${snapshot}.evaluation.json`, "utf8"))
       );
@@ -242,6 +253,42 @@ describe("archmind check", () => {
       expect(
         ruleEvaluationSchema.parse(JSON.parse(await readFile(output, "utf8"))).diagnostics
       ).toMatchObject([{ ruleId: "missing-component", code: "SELECTOR_NO_MATCH" }]);
+    });
+  });
+
+  it("flags a baseline from another engine version or another project", async () => {
+    await withFixture(async (root, repo, snapshot) => {
+      expect((await invoke("analyze", repo, "--out", snapshot)).code).toBe(0);
+      expect((await invoke("check", repo, "--snapshot", snapshot)).code).toBe(1);
+      const evaluation = ruleEvaluationSchema.parse(
+        JSON.parse(await readFile(`${snapshot}.evaluation.json`, "utf8"))
+      );
+      const baseline = path.join(root, "baseline.json");
+      await writeFile(
+        baseline,
+        JSON.stringify({ ...evaluation, governanceEngineVersion: "0.0.1" })
+      );
+      const older = await invoke(
+        "check",
+        repo,
+        "--snapshot",
+        snapshot,
+        "--baseline",
+        baseline,
+        "--format",
+        "summary"
+      );
+      expect(older.stdout).toContain("engine changed: yes");
+      expect(older.stderr).not.toContain("share no component");
+
+      const foreign = evaluation.findings.map((finding) => ({
+        ...finding,
+        fingerprint: "f".repeat(64),
+        subject: { kind: "components", componentIds: ["cmp:elsewhere"] }
+      }));
+      await writeFile(baseline, JSON.stringify({ ...evaluation, findings: foreign }));
+      const unrelated = await invoke("check", repo, "--snapshot", snapshot, "--baseline", baseline);
+      expect(unrelated.stderr).toContain("share no component");
     });
   });
 });

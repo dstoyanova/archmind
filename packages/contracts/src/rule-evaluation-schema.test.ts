@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { compareRuleEvaluations } from "./evaluation-comparison.js";
 import { ruleEvaluationSchema } from "./rule-evaluation-schema.js";
 
 const finding = {
@@ -69,5 +70,30 @@ describe("ruleEvaluationSchema", () => {
         findings: [{ ...finding, evidenceTotal: 0 }]
       }).success
     ).toBe(false);
+  });
+
+  it("compares evaluations, flagging engine changes and baselines that share no component", () => {
+    const base = ruleEvaluationSchema.parse(evaluation);
+    expect(compareRuleEvaluations(base, base)).toMatchObject({
+      engineChanged: false,
+      unrelatedBaseline: false,
+      existingFindings: [{ fingerprint: finding.fingerprint }]
+    });
+    expect(
+      compareRuleEvaluations({ ...base, governanceEngineVersion: "0.2.0" }, base)
+    ).toMatchObject({ engineChanged: true });
+
+    const elsewhere = {
+      ...finding,
+      fingerprint: "e".repeat(64),
+      subject: { kind: "components" as const, componentIds: ["package:libs/other"] }
+    };
+    const other = ruleEvaluationSchema.parse({ ...evaluation, findings: [elsewhere] });
+    expect(compareRuleEvaluations(base, other)).toMatchObject({
+      unrelatedBaseline: true,
+      newFindings: [{ fingerprint: elsewhere.fingerprint }],
+      resolvedFindings: [{ fingerprint: finding.fingerprint }]
+    });
+    expect(compareRuleEvaluations(base, { ...base, findings: [] }).unrelatedBaseline).toBe(false);
   });
 });

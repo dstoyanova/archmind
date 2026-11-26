@@ -74,6 +74,12 @@ export const projectionQuerySchema = z
 
 export const graphQueryParametersSchema = projectionQuerySchema.extend({
   level: z.enum(["component", "file"]).default("component"),
+  includeDependencies: z
+    .preprocess(parseBoolean, z.boolean())
+    .default(true)
+    .describe(
+      "When false, a component-level graph lists components only, without dependencies or cycles."
+    ),
   componentId: id.optional().describe("Required for file level; omit for component level.")
 });
 

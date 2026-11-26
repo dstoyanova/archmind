@@ -85,6 +85,13 @@ const denseRules = rulesConfigSchema.parse({
       components: [{ path: "modules/*" }],
       metric: "fileCount",
       max: 0
+    },
+    {
+      id: "no-dependencies",
+      type: "forbidden-dependency",
+      severity: "error",
+      from: [{ path: "modules/*" }],
+      to: [{ path: "modules/*" }]
     }
   ]
 });
@@ -115,6 +122,28 @@ const scopedRules = rulesConfigSchema.parse({
 await writeFile(
   join(directory, "governance.evaluation.json"),
   JSON.stringify(evaluate(governance, scopedRules, GOVERNANCE_ENGINE_VERSION))
+);
+await writeFile(
+  join(directory, "governance-diagnostics.evaluation.json"),
+  JSON.stringify(
+    evaluate(
+      governance,
+      rulesConfigSchema.parse({
+        ...governanceRules,
+        definitions: [
+          ...governanceRules.definitions,
+          {
+            id: "typo-selector",
+            type: "forbidden-dependency",
+            severity: "error",
+            from: [{ path: "src/missing" }],
+            to: [{ path: "src/ui" }]
+          }
+        ]
+      }),
+      GOVERNANCE_ENGINE_VERSION
+    )
+  )
 );
 await writeFile(
   join(directory, "governance-base.evaluation.json"),
