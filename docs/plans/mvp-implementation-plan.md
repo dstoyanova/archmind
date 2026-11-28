@@ -722,7 +722,7 @@ Small libraries are confirmed in the task that introduces them:
 
 ## 11. Revision history
 
-- **Revision 5 (2026-11-26):** M3 refined after the M3.1 to M3.5 implementation and its [code review](../code-reviews/m3-code-review.md).
+- **Revision 5 (2026-11-26):** M3 refined after the M3.1 to M3.5 implementation and its code review.
   - **Findings:** cycle fingerprints no longer include internal edges. `restricted-package` covers Node.js built-ins. Cycle messages are bounded.
   - **Comparison:** comparisons also flag `engineChanged` and `unrelatedBaseline`. The API reads evaluations of any supported schema version, whatever their engine version.
   - **API and explorer:** evaluations are checked against their snapshot, the list uses cached per-file summaries, and graph badges come from a highlights endpoint that follows the list filters. The explorer shows rule diagnostics and highlights the reported edge.

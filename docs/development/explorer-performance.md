@@ -26,14 +26,14 @@ The M3.5 benchmark also selects a governance evaluation before measuring expand 
 
 ## Layout decision
 
-[E3 of the M2 code review](../code-reviews/m2-code-review.md) asked whether the explorer should keep ELK `box` packing. The screenshots are in [m2-layout-screenshots](./m2-layout-screenshots), captured in headless Chromium at 1440 × 900 with default filters, for Vitest and Changesets at the M2.7 revisions. The `box` screenshots were taken with the hiding of components without source files already applied, so Vitest shows 23 components rather than the 43 of the M2.7 run.
+E3 of the M2 code review asked whether the explorer should keep ELK `box` packing. The `layered` screenshots are in [m2-layout-screenshots](./m2-layout-screenshots); the `box` ones were removed after the decision. They were captured in headless Chromium at 1440 × 900 with default filters, for Vitest and Changesets at the M2.7 revisions. The `box` screenshots were taken with the hiding of components without source files already applied, so Vitest shows 23 components rather than the 43 of the M2.7 run.
 
-| Repository | View     | `box` (edges ignored)                                             | `layered` (edges passed to ELK)                                       |
-| ---------- | -------- | ----------------------------------------------------------------- | --------------------------------------------------------------------- |
-| Vitest     | Default  | [screenshot](./m2-layout-screenshots/vitest-box-default.png)      | [screenshot](./m2-layout-screenshots/vitest-layered-default.png)      |
-| Vitest     | Expanded | [screenshot](./m2-layout-screenshots/vitest-box-expanded.png)     | [screenshot](./m2-layout-screenshots/vitest-layered-expanded.png)     |
-| Changesets | Default  | [screenshot](./m2-layout-screenshots/changesets-box-default.png)  | [screenshot](./m2-layout-screenshots/changesets-layered-default.png)  |
-| Changesets | Expanded | [screenshot](./m2-layout-screenshots/changesets-box-expanded.png) | [screenshot](./m2-layout-screenshots/changesets-layered-expanded.png) |
+| Repository | View     | `layered` (edges passed to ELK)                                       |
+| ---------- | -------- | --------------------------------------------------------------------- |
+| Vitest     | Default  | [screenshot](./m2-layout-screenshots/vitest-layered-default.png)      |
+| Vitest     | Expanded | [screenshot](./m2-layout-screenshots/vitest-layered-expanded.png)     |
+| Changesets | Default  | [screenshot](./m2-layout-screenshots/changesets-layered-default.png)  |
+| Changesets | Expanded | [screenshot](./m2-layout-screenshots/changesets-layered-expanded.png) |
 
 **Finding.** With `box`, nodes are packed by size, so dependencies are straight lines across the whole canvas, often through other nodes. Direction cannot be read: in Vitest, 168 edges cross a 90-package external grid, and in Changesets the expanded `cli` children are in no order.
 

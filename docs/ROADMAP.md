@@ -56,7 +56,7 @@ Every milestone ends with a **working, demoable product**. No milestone consists
 - [x] Interactive hierarchical graph: auto-layout, expand and collapse, search, cycle highlighting, and filters for file role and type-only imports.
 - [x] Snapshot overview, component details, dependency evidence and drill-down to files.
 - [x] ArchMind's own `archmind.config.json`, with `componentRoots` and `analysis.exclude`.
-- [x] The inferred hierarchy is [validated on real repositories](./development/m2-hierarchy-validation.md).
+- [x] The inferred hierarchy is validated on real repositories (see [ADR-0005](./adr/ADR-0005-hierarchical-hybrid-component-model-and-file-roles.md)).
 
 **Outcome:** browse the architecture of any repository analysed in M1.
 

@@ -246,7 +246,7 @@ Put an `archmind.config.json` in the root of the analysed repository. Without on
 | `fileRoles`      | Glob patterns that classify files as `test`, `story`, `script` or `config`. Everything else is `source`. The defaults recognise common names such as `*.test.ts`, `*.stories.*` and `scripts/**`.      |
 | `exclude`        | Globs of files that are not analysed at all (fixtures, generated code). Imports that point into excluded files are reported as `IMPORT_TARGET_EXCLUDED`.                                               |
 
-By default, a repository is analysed as a hierarchy: the repository root, then each workspace package (from `pnpm-workspace.yaml` or the `workspaces` field of `package.json`), then folders. Every file belongs to exactly one component. [Hierarchy validation on real repositories](./docs/development/m2-hierarchy-validation.md) shows when each setting helps.
+By default, a repository is analysed as a hierarchy: the repository root, then each workspace package (from `pnpm-workspace.yaml` or the `workspaces` field of `package.json`), then folders. Every file belongs to exactly one component. [ADR-0005](./docs/adr/ADR-0005-hierarchical-hybrid-component-model-and-file-roles.md) explains when each setting helps.
 
 ### Rules
 
@@ -437,7 +437,7 @@ The tests generate their own fixtures. The CLI governance fixtures in `apps/cli/
 | `packages/analysis-pipeline`   | Composes the engines for a local repository.                          |
 | `packages/config`              | Shared ESLint, Prettier, TypeScript and Vitest configuration.         |
 
-More: [architecture](./docs/ARCHITECTURE.md), [product](./docs/PRODUCT.md), [roadmap](./docs/ROADMAP.md), [backlog](./docs/BACKLOG.md), [implementation plan](./docs/plans/mvp-implementation-plan.md), [decision records](./docs/adr) and [code reviews](./docs/code-reviews).
+More: [architecture](./docs/ARCHITECTURE.md), [product](./docs/PRODUCT.md), [roadmap](./docs/ROADMAP.md), [backlog](./docs/BACKLOG.md), [implementation plan](./docs/plans/mvp-implementation-plan.md) and [decision records](./docs/adr).
 
 ## 10. About the project
 

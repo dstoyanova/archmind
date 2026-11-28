@@ -50,7 +50,7 @@ Define the rule configuration and evaluation contract, including how selectors a
 
 ## Amendments
 
-Amendments are added after implementation review ([M3 code review](../code-reviews/m3-code-review.md)). The decisions above stay as written. Where an amendment differs, the amendment applies.
+Amendments are added after implementation review (the M3 code review). The decisions above stay as written. Where an amendment differs, the amendment applies.
 
 ### 2026-11-26
 
@@ -64,7 +64,7 @@ Amendments are added after implementation review ([M3 code review](../code-revie
 
 ### 2026-11-28
 
-Decisions from the [M3.6 validation](../development/m3-default-rules-validation.md), which has the data and resolves the open question above.
+Decisions from the M3.6 validation, which resolve the open question above. The validation ran the default rules on ArchMind, Vitest and Changesets at the M2.7 revisions, each with its default hierarchy, and with `nestedFolders` for Vitest and Changesets (five hierarchies). It traced findings to their evidence and swept the maximum from 5 to 15.
 
 - **Maximum.** `archmind/high-coupling` keeps its maximum of 10 (warn above 10). Across five hierarchies of ArchMind, Vitest and Changesets it flags 3.5% of leaf components and nothing in ArchMind. The values 13 to 18 mix useful findings and noise (facades, orchestrating commands, type declarations), so no maximum separates them.
 - **Depth.** `archmind/high-coupling` now reports leaf components only: components with no child in the snapshot. A parent's `fanOut` is mostly its children's targets collapsed to the parent's depth, so with every depth, 4 of the 13 findings (31%) repeated a flagged child's coupling. No flagged parent lacked a flagged descendant at any maximum from 5 to 15, so the restriction loses no location. Custom `threshold` rules still apply to every component their selectors match. The result depends on the hierarchy: a folder that `nestedFolders` splits is no longer reported itself, only its children are.

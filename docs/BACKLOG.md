@@ -198,15 +198,15 @@ Check that the inferred hierarchy makes sense to people (§7, "The inferred hier
 - **Depends on:** M2.5, M2.6
 - **Acceptance criteria:**
   - [x] ArchMind, Vitest and Changesets are explored with the default hierarchy, and with `componentRoots` where the default is unhelpful.
-  - [x] Observations and reproduction steps are recorded in the [M2.7 hierarchy validation report](./development/m2-hierarchy-validation.md).
+  - [x] Observations were recorded in a hierarchy validation report. It was removed in the docs cleanup; the decisions it led to are in ADR-0005.
 
 #### Follow-ups from real repository validation
 
-- [x] Preserve useful sibling components when drilling deeper into a subtree. `analysis.nestedFolders` adds children under a listed folder and keeps its siblings (Vitest `node/reporters` next to `runtime`, Changesets' commands next to `lib`). Validated on both repositories in the [report](./development/m2-hierarchy-validation.md#keeping-siblings-while-going-deeper) and recorded in an ADR-0005 addendum.
+- [x] Preserve useful sibling components when drilling deeper into a subtree. `analysis.nestedFolders` adds children under a listed folder and keeps its siblings (Vitest `node/reporters` next to `runtime`, Changesets' commands next to `lib`). Validated on both repositories and recorded in an ADR-0005 addendum.
 - [x] Reduce fixture noise in the production view. Components with no file in the selected roles are hidden unless a dependency ends at them, and can be shown with a checkbox, by selecting the `test` role, or through `includeEmptyComponents=true`. Vitest's depth-1 view goes from 43 to 23 components.
 - [x] Explain missing edges next to resolution statistics. The snapshot overview states what each resolution does to the graph and lists diagnostic totals by code, with the effect of each. Non-code workspace imports (`@changesets/cli/package.json`) still share `WORKSPACE_ENTRY_UNMAPPED` with unmapped entries (`vitest/config`); the explanation names both. Separating them would change the resolver and the engine version.
 
-Items from the [M2 code review](./code-reviews/m2-code-review.md), which has the problem statements, actions and acceptance criteria:
+Items from the M2 code review (since removed from the repository):
 
 - [x] **E1 (P2):** Cache snapshot list summaries by file fingerprint, so listing more than four snapshots doesn't re-parse every file.
 - [x] **E2 (P2):** Keep the selected snapshot and graph state when refreshing the snapshot list.
@@ -301,7 +301,7 @@ Add a findings list and detail view, graph highlighting and a health summary to 
 
 #### Follow-ups from the M3 code review
 
-Items from the [M3 code review](./code-reviews/m3-code-review.md), which has the problem statements, actions and acceptance criteria. All are addressed, and the ADR-0006 [amendments](./adr/ADR-0006-governance-rules-and-evaluations.md#amendments) record the decisions.
+Items from the M3 code review (since removed from the repository). All are addressed, and the ADR-0006 [amendments](./adr/ADR-0006-governance-rules-and-evaluations.md#amendments) record the decisions.
 
 - [x] **G1 (P1):** Keep a cycle's fingerprint when it gains or loses an internal edge, so `--new-only` doesn't fail on baselined cycles.
 - [x] **G2 (P1):** Show rule diagnostics in the explorer, so a rule that was not evaluated is not mistaken for a clean one.
@@ -324,11 +324,11 @@ Check that the default rules produce findings that people consider worth reviewi
   - [x] ArchMind, Vitest and Changesets are checked with the default rules, at the M2.7 revisions.
   - [x] The default high-coupling threshold is calibrated from these results and recorded in ADR-0006. The calibration counts how many default findings are nested duplicates (a parent and its children reporting the same coupling) and decides whether the rule should cover every depth or only leaf components (M3 review G11). The maximum stays at 10, and the rule now covers leaf components only: 4 of 13 findings (31%) were nested duplicates.
   - [x] The report, in `docs/development/`, traces a sample of findings to their evidence and labels each one as useful, noise or a coverage gap. Coverage gaps include findings missed because of `WORKSPACE_ENTRY_UNMAPPED`.
-  - [x] The report includes reproduction steps, like the [M2.7 report](development/m2-hierarchy-validation.md). See the [M3.6 report](./development/m3-default-rules-validation.md).
+  - [x] The report includes reproduction steps. The report was removed in the docs cleanup; its decisions and key numbers are in the ADR-0006 [2026-11-28 amendment](./adr/ADR-0006-governance-rules-and-evaluations.md#2026-11-28).
 
 #### Follow-ups from real repository validation
 
-Not done in M3.6. Each changes rule behaviour or the resolver, and so the engine version. The [report](./development/m3-default-rules-validation.md#follow-ups) has the evidence.
+Not done in M3.6. Each changes rule behaviour or the resolver, and so the engine version.
 
 - [ ] Name the targets, or the heaviest imports, in a `high-coupling` finding. It has no evidence today.
 - [ ] Decide whether a cycle between a component and its own descendant needs a file-level cycle to be reported (2 of 5 traced cycles were of this kind).

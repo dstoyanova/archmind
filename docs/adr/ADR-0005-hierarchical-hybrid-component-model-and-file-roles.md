@@ -70,7 +70,7 @@ File roles are classified deterministically as `source`, `test`, `story`, `scrip
 
 ## Addendum (2026-11-20): nested folder components
 
-- **Problem.** Setting `componentRoots` deeper (Vitest `packages/vitest` at `src/node`) exposes the subfolders of that folder but makes every other folder under `src` (`runtime`, `utils` and so on) part of the package component. See the [M2.7 validation report](../development/m2-hierarchy-validation.md).
+- **Problem.** Setting `componentRoots` deeper (Vitest `packages/vitest` at `src/node`) exposes the subfolders of that folder but makes every other folder under `src` (`runtime`, `utils` and so on) part of the package component. This was observed in the M2.7 validation on Vitest.
 - **`analysis.nestedFolders`** is an optional list of repository-relative folder paths, for example `["packages/vitest/src/node"]`. Each entry must name a folder component, either a depth-2 folder or one created by an earlier entry. Its immediate subfolders become child folder components one level deeper, and all sibling folders stay. Entries apply shallowest first, so `["a/src/x", "a/src/x/y"]` creates two further levels.
 - Ownership is unchanged: a file belongs to the deepest matching folder component within its package. Files directly in a listed folder stay with that folder. Folders owned by a nested package never create components in the outer package.
 - An entry that names no folder component produces a `CONFIG_NESTED_FOLDER_UNKNOWN` warning and is ignored.
