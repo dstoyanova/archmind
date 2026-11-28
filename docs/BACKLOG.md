@@ -313,7 +313,7 @@ Items from the [M3 code review](./code-reviews/m3-code-review.md), which has the
 - [x] **G8 (P2):** Show finding count, rules hash and engine version in the evaluation choosers, let a baseline come from the same snapshot, and flag baselines that share no component.
 - [x] **G9 (P2):** Serve graph badges from a lightweight highlights endpoint that follows the list filters, and colour them by highest severity. The benchmark runs with 3,299 findings.
 - [x] **G10 (P2):** Highlight the reported edge when jumping to a finding, and fall back to the minimal expansion when the current one would pass the 128 limit.
-- [x] **G11 (P3):** Name at most five cycle members in a message. Whether the default coupling rule should cover every depth stays with M3.6, below.
+- [x] **G11 (P3):** Name at most five cycle members in a message. The default coupling rule now reports leaf components only, which removes the nested duplicates found in M3.6.
 
 ### M3.6 Validate default rules on real repositories
 
@@ -321,10 +321,19 @@ Check that the default rules produce findings that people consider worth reviewi
 
 - **Depends on:** M3.3, M3 review items G1 to G3
 - **Acceptance criteria:**
-  - [ ] ArchMind, Vitest and Changesets are checked with the default rules, at the M2.7 revisions.
-  - [ ] The default high-coupling threshold is calibrated from these results and recorded in ADR-0006. The calibration counts how many default findings are nested duplicates (a parent and its children reporting the same coupling) and decides whether the rule should cover every depth or only leaf components (M3 review G11).
-  - [ ] The report, in `docs/development/`, traces a sample of findings to their evidence and labels each one as useful, noise or a coverage gap. Coverage gaps include findings missed because of `WORKSPACE_ENTRY_UNMAPPED`.
-  - [ ] The report includes reproduction steps, like the [M2.7 report](development/m2-hierarchy-validation.md).
+  - [x] ArchMind, Vitest and Changesets are checked with the default rules, at the M2.7 revisions.
+  - [x] The default high-coupling threshold is calibrated from these results and recorded in ADR-0006. The calibration counts how many default findings are nested duplicates (a parent and its children reporting the same coupling) and decides whether the rule should cover every depth or only leaf components (M3 review G11). The maximum stays at 10, and the rule now covers leaf components only: 4 of 13 findings (31%) were nested duplicates.
+  - [x] The report, in `docs/development/`, traces a sample of findings to their evidence and labels each one as useful, noise or a coverage gap. Coverage gaps include findings missed because of `WORKSPACE_ENTRY_UNMAPPED`.
+  - [x] The report includes reproduction steps, like the [M2.7 report](development/m2-hierarchy-validation.md). See the [M3.6 report](./development/m3-default-rules-validation.md).
+
+#### Follow-ups from real repository validation
+
+Not done in M3.6. Each changes rule behaviour or the resolver, and so the engine version. The [report](./development/m3-default-rules-validation.md#follow-ups) has the evidence.
+
+- [ ] Name the targets, or the heaviest imports, in a `high-coupling` finding. It has no evidence today.
+- [ ] Decide whether a cycle between a component and its own descendant needs a file-level cycle to be reported (2 of 5 traced cycles were of this kind).
+- [ ] Decide whether a cycle's members should include components that join only through type-only edges.
+- [ ] Map `vitest/*`-style workspace exports to source folders, so imports into a package's folders count below package level.
 
 ## M4 — Persistent analysis service
 

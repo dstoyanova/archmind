@@ -31,7 +31,7 @@ import { collectCycleSupport } from "./cycle-findings.js";
 import { defaultRules } from "./defaults.js";
 import { createSelectorIndex } from "./selectors.js";
 
-export const GOVERNANCE_ENGINE_VERSION = "0.2.0";
+export const GOVERNANCE_ENGINE_VERSION = "0.3.0";
 const MESSAGE_MEMBER_LIMIT = 5;
 const NODE_PREFIX = "node:";
 
@@ -82,10 +82,12 @@ export function evaluate(
   const graphCache = new Map<string, ProjectedGraph>();
   const diagnostics: RuleDiagnostic[] = [];
   const findings: RuleFinding[] = [];
-  const activeRules: { rule: RuleDefinition; ruleVersion: string }[] = [
-    ...enabledDefaultRuleIds(rules).map((id) => defaultRules[id]),
-    ...rules.definitions.map((rule) => ({ rule, ruleVersion: hash(rule) }))
-  ];
+  const parentIds = new Set(components.map((item) => item.parentId));
+  const activeRules: { rule: RuleDefinition; ruleVersion: string; leafComponentsOnly?: boolean }[] =
+    [
+      ...enabledDefaultRuleIds(rules).map((id) => defaultRules[id]),
+      ...rules.definitions.map((rule) => ({ rule, ruleVersion: hash(rule) }))
+    ];
 
   function graphAt(depth: number, scope: GraphRule["scope"]): ProjectedGraph {
     const key = canonicalJson([depth, scope]);
@@ -144,7 +146,7 @@ export function evaluate(
     return [...evidence.values()].sort(compareEvidence);
   }
 
-  for (const { rule, ruleVersion } of activeRules) {
+  for (const { rule, ruleVersion, leafComponentsOnly } of activeRules) {
     const select = selectors.forRule(rule.id, diagnostics);
     const initialDiagnostics = diagnostics.length;
     const valid = () => diagnostics.length === initialDiagnostics;
@@ -180,6 +182,9 @@ export function evaluate(
           break;
         }
         for (const id of targets) {
+          if (leafComponentsOnly && parentIds.has(id)) {
+            continue;
+          }
           const value = component(id).metrics[rule.metric];
           if (value > rule.max) {
             addFinding(

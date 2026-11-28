@@ -419,6 +419,29 @@ describe("governance evaluation", () => {
     );
   });
 
+  it("applies the default coupling rule to leaf components only, and custom thresholds to every selected component", () => {
+    const busy = { ...metrics, fanOut: 11 };
+    const list = components.map((item) =>
+      item.id === "ui" || item.id === "nested" ? { ...item, metrics: busy } : item
+    );
+    const input = snapshot([], list);
+    const everyDepth = {
+      ...threshold,
+      components: [{ path: "apps/web/src/modules" }, { path: "apps/web/src/modules/feature" }]
+    };
+
+    expect(run(input, [], true).findings).toMatchObject([
+      { ruleId: "archmind/high-coupling", subject: { componentIds: ["nested"] } }
+    ]);
+    expect(
+      run(input, [everyDepth])
+        .findings.flatMap(({ subject }) =>
+          subject.kind === "components" ? subject.componentIds : []
+        )
+        .sort()
+    ).toEqual(["nested", "ui"]);
+  });
+
   it("caps and sorts distinct evidence and keeps fingerprints stable across unrelated edits", () => {
     const edges: Edge[] = Array.from({ length: 25 }, (_, index) => ({
       from: "nested",

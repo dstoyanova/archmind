@@ -12,7 +12,8 @@ export const defaultRules = {
     }
   },
   "archmind/high-coupling": {
-    ruleVersion: "1",
+    ruleVersion: "2",
+    leafComponentsOnly: true,
     rule: {
       id: "archmind/high-coupling",
       type: "threshold",
@@ -24,5 +25,5 @@ export const defaultRules = {
   }
 } satisfies Record<
   (typeof DEFAULT_RULE_IDS)[number],
-  { ruleVersion: string; rule: RuleDefinition }
+  { ruleVersion: string; rule: RuleDefinition; leafComponentsOnly?: boolean }
 >;

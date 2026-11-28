@@ -164,14 +164,14 @@ Priority legend:
 
 #### G11. Bound cycle messages and review default-rule volume
 
-- **Status:** Fixed for messages: at most five members are named. The default coupling rule's depth is a calibration question and moves to M3.6, which now records the number of nested duplicate findings. Original status: read only.
+- **Status:** Fixed. Messages name at most five members, and the default coupling rule reports leaf components only after the M3.6 calibration (4 of 13 findings were nested duplicates). Original status: read only.
 - **Problem:**
   - A cycle finding's message lists every member path (`Dependency cycle involving a; b; c; …`). For a large SCC, the message in the findings list and in the evaluation JSON can be several kilobytes. The `componentIds` array is unbounded, too.
   - `archmind/high-coupling` uses selector `.`, which matches every component at every depth. A parent and its children can all report the same coupling, and a package's `fanOut` is also counted in each ancestor.
 - **Actions:**
   - [x] Truncate the member list in the message (for example the first 5, plus "and N more"). Keep the full list in `subject`.
-  - [ ] Look at the duplicate threshold findings when calibrating in M3.6, and consider restricting the default to one depth or to leaf components. Moved to M3.6, which needs real-repository data.
-- **Acceptance:** Message length is bounded. M3.6 records how many default findings are nested duplicates (open).
+  - [x] Look at the duplicate threshold findings when calibrating in M3.6, and consider restricting the default to one depth or to leaf components. Done in M3.6: the default is now leaf components only. See [ADR-0006](../adr/ADR-0006-governance-rules-and-evaluations.md#2026-11-28) and the [validation report](../development/m3-default-rules-validation.md).
+- **Acceptance:** Message length is bounded. M3.6 records how many default findings are nested duplicates: 4 of 13 across five hierarchies.
 
 ## Acceptance criteria versus evidence
 

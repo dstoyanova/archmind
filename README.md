@@ -141,7 +141,7 @@ A _rule_ describes something that must hold in your architecture. ArchMind evalu
 Two rules are always on unless you turn them off:
 
 - `archmind/no-cycles` (error): no dependency cycles between components. Cycles that only exist in test files or through `import type` are ignored.
-- `archmind/high-coupling` (warning): a component depends on more than 10 other components.
+- `archmind/high-coupling` (warning): a leaf component (one with no child components) depends on more than 10 other components.
 
 You add your own rules in `archmind.config.json` ([how](#rules)). The repository ships a small demo project that breaks every kind of rule, which is the easiest way to see how this works.
 

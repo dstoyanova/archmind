@@ -61,3 +61,11 @@ Amendments are added after implementation review ([M3 code review](../code-revie
 - **Validation against the snapshot (G7).** A tool that reads an evaluation for a snapshot rejects it when a finding refers to a component or file that the snapshot does not have, or when the `analysisConfigHash` values differ. Fingerprints are not recomputed.
 - **Baseline plausibility (G8).** When both evaluations have findings but no component in common, a comparison is flagged `unrelatedBaseline`. This is a hint for a baseline from another project, not an error.
 - **Default coupling rule.** Whether `archmind/high-coupling` should apply at every depth, or only to leaf components, is decided by the M3.6 calibration, which also records the number of nested duplicate findings.
+
+### 2026-11-28
+
+Decisions from the [M3.6 validation](../development/m3-default-rules-validation.md), which has the data and resolves the open question above.
+
+- **Maximum.** `archmind/high-coupling` keeps its maximum of 10 (warn above 10). Across five hierarchies of ArchMind, Vitest and Changesets it flags 3.5% of leaf components and nothing in ArchMind. The values 13 to 18 mix useful findings and noise (facades, orchestrating commands, type declarations), so no maximum separates them.
+- **Depth.** `archmind/high-coupling` now reports leaf components only: components with no child in the snapshot. A parent's `fanOut` is mostly its children's targets collapsed to the parent's depth, so with every depth, 4 of the 13 findings (31%) repeated a flagged child's coupling. No flagged parent lacked a flagged descendant at any maximum from 5 to 15, so the restriction loses no location. Custom `threshold` rules still apply to every component their selectors match. The result depends on the hierarchy: a folder that `nestedFolders` splits is no longer reported itself, only its children are.
+- **Versions.** The built-in rule's version is `2` and `governanceEngineVersion` is `0.3.0`, so comparisons with older evaluations are flagged `engineChanged`.
