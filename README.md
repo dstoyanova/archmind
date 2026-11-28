@@ -365,7 +365,7 @@ Rule problems are reported separately, per evaluation: `SELECTOR_NO_MATCH` (a se
 
 ### Benchmarks
 
-`archmind resolution-benchmark` measures import-resolution quality and speed on large repositories. See the [benchmark guide](./docs/development/m1-resolution-benchmark.md) and the [explorer performance notes](./docs/development/explorer-performance.md).
+`archmind resolution-benchmark` measures import-resolution quality and speed on large repositories. See [performance and quality evidence](./docs/ARCHITECTURE.md#performance-and-quality-evidence) for the config format, results and the explorer rendering budgets.
 
 ## 7. Local API
 

@@ -103,7 +103,7 @@ Create `apps/cli`, fixture repositories with expected graphs, and the dev-only r
 - **Acceptance criteria:**
   - [x] `archmind analyze <path> --out snapshot.json` writes the snapshot. `--format summary` prints components, dependencies, cycles, resolution statistics and diagnostics.
   - [x] Fixtures cover: single package, monorepo with `dist` entry points, path aliases, missing `extends` base, cycles (runtime, type-only and test-only), malformed files.
-  - [x] On at least two open-source monorepos, the unresolved rate is at most 2% and agreement with the reference tool is at least 95%. Results are recorded in `docs/development/`.
+  - [x] On at least two open-source monorepos, the unresolved rate is at most 2% and agreement with the reference tool is at least 95%. Results are recorded in [ARCHITECTURE.md](./ARCHITECTURE.md#import-resolution-benchmark-m1).
   - [x] Performance is measured against NFR-7.
 
 ## M2 — Local architecture explorer
@@ -167,7 +167,7 @@ Create `apps/web` (Next.js, Tailwind, shadcn/ui, React Flow) with the hierarchic
   - [x] Filters for internal and external dependencies, file role and type-only imports. The default shows the production graph.
   - [x] Loading, empty and error states, including invalid snapshot files.
   - [x] Playwright is set up with the API and web app running against a fixture snapshot directory, and runs in CI.
-  - [x] With a generated snapshot of 300 components and 3,000 dependencies, the first render takes under 2 seconds and each expand or collapse under 500 ms on a developer laptop (provisional budgets). See the [benchmark results](development/explorer-performance.md).
+  - [x] With a generated snapshot of 300 components and 3,000 dependencies, the first render takes under 2 seconds and each expand or collapse under 500 ms on a developer laptop (provisional budgets). See the [benchmark results](./ARCHITECTURE.md#explorer-rendering-budgets).
 
 ### M2.5 Add snapshot overview, component and dependency details
 
@@ -210,7 +210,7 @@ Items from the M2 code review (since removed from the repository):
 
 - [x] **E1 (P2):** Cache snapshot list summaries by file fingerprint, so listing more than four snapshots doesn't re-parse every file.
 - [x] **E2 (P2):** Keep the selected snapshot and graph state when refreshing the snapshot list.
-- [x] **E3 (P2):** Review graph layout readability with screenshots of Vitest and Changesets, and decide whether to keep ELK `box` packing. Replaced by a layered layout up to 500 internal edges; see the [layout decision](./development/explorer-performance.md#layout-decision).
+- [x] **E3 (P2):** Review graph layout readability with screenshots of Vitest and Changesets, and decide whether to keep ELK `box` packing. Replaced by a layered layout up to 500 internal edges; see the [layout decision](./ARCHITECTURE.md#graph-layout).
 - [x] **E4 (P2):** Qualify duplicate component names in graph node titles, edge labels and evidence buttons, as well as in search and list results. Verify that Changesets' two `pre` components are distinguishable without guessing their paths.
 - [x] **E5 (P2):** Complete the M2.7 evidence: trace the Vitest and Changesets edge-count changes, tune more packages, and note that diagnostics were sampled from the first page only.
 - [x] **E6 (P3):** Limit explorer projections to 128 repeated `expand` values. Larger lists within the HTTP request-size budget return `400 INVALID_REQUEST`; the UI prompts users to collapse components before expanding more.
@@ -295,7 +295,7 @@ Add a findings list and detail view, graph highlighting and a health summary to 
   - [x] You can jump from a finding to its evidence.
   - [x] Labels qualify repeated component names with their path, as in M2 (E4).
   - [x] The health summary shows analysis coverage next to the finding counts, and explains `WORKSPACE_ENTRY_UNMAPPED` as the snapshot overview does.
-  - [x] Highlighting keeps the explorer within the M2 performance budgets in [explorer-performance.md](development/explorer-performance.md).
+  - [x] Highlighting keeps the explorer within the M2 performance budgets in [ARCHITECTURE.md](./ARCHITECTURE.md#explorer-rendering-budgets).
   - [x] The findings list is keyboard-navigable (NFR-14).
   - [x] Covered by a Playwright test, including a finding on a collapsed component.
 
@@ -323,7 +323,7 @@ Check that the default rules produce findings that people consider worth reviewi
 - **Acceptance criteria:**
   - [x] ArchMind, Vitest and Changesets are checked with the default rules, at the M2.7 revisions.
   - [x] The default high-coupling threshold is calibrated from these results and recorded in ADR-0006. The calibration counts how many default findings are nested duplicates (a parent and its children reporting the same coupling) and decides whether the rule should cover every depth or only leaf components (M3 review G11). The maximum stays at 10, and the rule now covers leaf components only: 4 of 13 findings (31%) were nested duplicates.
-  - [x] The report, in `docs/development/`, traces a sample of findings to their evidence and labels each one as useful, noise or a coverage gap. Coverage gaps include findings missed because of `WORKSPACE_ENTRY_UNMAPPED`.
+  - [x] The report traces a sample of findings to their evidence and labels each one as useful, noise or a coverage gap. Coverage gaps include findings missed because of `WORKSPACE_ENTRY_UNMAPPED`.
   - [x] The report includes reproduction steps. The report was removed in the docs cleanup; its decisions and key numbers are in the ADR-0006 [2026-11-28 amendment](./adr/ADR-0006-governance-rules-and-evaluations.md#2026-11-28).
 
 #### Follow-ups from real repository validation

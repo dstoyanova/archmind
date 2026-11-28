@@ -335,6 +335,18 @@ describe("runCli", () => {
     expect(stderr.join("\n")).toContain("Usage:");
   });
 
+  it("requires --config for resolution-benchmark", async () => {
+    const stderr: string[] = [];
+
+    const code = await runCli(["resolution-benchmark"], {
+      stdout: () => {},
+      stderr: (message) => stderr.push(message)
+    });
+
+    expect(code).toBe(1);
+    expect(stderr.join("\n")).toContain("Missing --config.");
+  });
+
   it("builds summary text from snapshots", async () => {
     const snapshot = (
       await analyzeRepository({

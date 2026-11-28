@@ -710,7 +710,7 @@ Small libraries are confirmed in the task that introduces them:
 - Ignore-file and glob matching.
 - YAML parsing (`pnpm-workspace.yaml`).
 - Tar extraction.
-- Graph layout: ELK.js compound layout. The layered algorithm places components by dependency direction up to 500 internal edges; denser graphs use box packing so layout time stays within the explorer budgets. React Flow renders the edges. See [the layout decision](../development/explorer-performance.md#layout-decision).
+- Graph layout: ELK.js compound layout. The layered algorithm places components by dependency direction up to 500 internal edges; denser graphs use box packing so layout time stays within the explorer budgets. React Flow renders the edges. See [the layout decision](../ARCHITECTURE.md#graph-layout).
 - Explorer data fetching: native `fetch`, with the first snapshot page loaded on the server and cancellable graph requests through a same-origin Next.js route. Shared Zod schemas validate responses.
 - Logging (pino).
 - The dev-only reference tool for the resolution benchmark.

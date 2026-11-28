@@ -88,7 +88,7 @@ async function runAnalyze(args: string[], io: CliIo): Promise<number> {
 }
 
 async function runBenchmark(args: string[], io: CliIo): Promise<number> {
-  let configPath = "docs/development/resolution-benchmark.config.json";
+  let configPath: string | undefined;
 
   for (let index = 0; index < args.length; index += 1) {
     const token = args[index];
@@ -108,6 +108,11 @@ async function runBenchmark(args: string[], io: CliIo): Promise<number> {
     return 1;
   }
 
+  if (configPath === undefined) {
+    io.stderr(`Missing --config.\n${buildUsage()}`);
+    return 1;
+  }
+
   const absoluteConfigPath = path.resolve(configPath);
   const config = JSON.parse(
     await readFile(absoluteConfigPath, "utf8")
@@ -123,7 +128,7 @@ function buildUsage(): string {
     "Usage:",
     "  archmind analyze <path> --out <snapshot.json> [--format snapshot|summary]",
     CHECK_USAGE,
-    "  archmind resolution-benchmark [--config <config.json>]"
+    "  archmind resolution-benchmark --config <config.json>"
   ].join("\n");
 }
 
